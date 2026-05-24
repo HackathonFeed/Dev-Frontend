@@ -1,0 +1,45 @@
+# HackathonFeed Frontend — Render Blueprint
+#
+# Deploy:
+#   1. Render Dashboard → New → Blueprint
+#   2. Connect your Git repo
+#   3. Set Root Directory to: Frontend
+#   4. Add secret: GEMINI_API_KEY (for AI Validate)
+#
+# Expects API at: https://hackathonfeed-api.onrender.com
+
+services:
+  - type: web
+    name: hackathonfeed-web
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+
+      # Express proxy target (server.ts → /api/v1, /uploads, /health)
+      - key: BACKEND_URL
+        value: https://hackathonfeed-api.onrender.com
+
+      # Vite build-time vars (embedded in client bundle)
+      - key: VITE_API_BASE_URL
+        value: https://hackathonfeed-api.onrender.com/api/v1
+      - key: VITE_API_ORIGIN
+        value: https://hackathonfeed-api.onrender.com
+
+      # Public site URL (set automatically after deploy)
+      - key: APP_URL
+        fromService:
+          type: web
+          name: hackathonfeed-web
+          envVarKey: RENDER_EXTERNAL_URL
+
+      # AI Validator — set in Render Dashboard → Environment
+      - key: GEMINI_API_KEY
+        sync: false
