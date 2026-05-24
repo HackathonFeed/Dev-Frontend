@@ -1,0 +1,322 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;900&family=Inter:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Brutalist palette (light / dark via class on <html>) ── */
+:root {
+  --hf-bg: #f5f0e8;
+  --hf-bg-elevated: #faf7f2;
+  --hf-bg-sidebar: #eee9e0;
+  --hf-bg-card: #ffffff;
+  --hf-bg-input: #ffffff;
+  --hf-ink: #1a1a1a;
+  --hf-ink-muted: #52525b;
+  --hf-border: #1a1a1a;
+  --hf-shadow: #1a1a1a;
+  --hf-grid-line: rgba(26, 26, 26, 0.08);
+  --hf-grid-line-light: rgba(255, 255, 255, 0.08);
+  --hf-scrollbar-track: #f5f0e8;
+  --hf-accent-yellow: #ffcc00;
+  --hf-accent-blue: #0055ff;
+  --hf-accent-red: #e63b2e;
+}
+
+html.dark {
+  --hf-bg: #0a0a0b;
+  --hf-bg-elevated: #141416;
+  --hf-bg-sidebar: #101012;
+  --hf-bg-card: #1a1a1e;
+  --hf-bg-input: #27272a;
+  --hf-ink: #fafafa;
+  --hf-ink-muted: #a1a1aa;
+  --hf-border: #d4d4d8;
+  --hf-shadow: #ffcc00;
+  --hf-grid-line: rgba(250, 250, 250, 0.05);
+  --hf-grid-line-light: rgba(255, 204, 0, 0.08);
+  --hf-scrollbar-track: #141416;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-headline: "Space Grotesk", sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-label: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --color-surface-container-low: var(--hf-bg-sidebar);
+  --color-secondary-container: #ffdad6;
+  --color-on-primary-fixed: var(--hf-ink);
+  --color-surface-variant: var(--hf-bg-elevated);
+  --color-surface-tint: var(--hf-ink);
+  --color-surface-container: var(--hf-bg-sidebar);
+  --color-surface-container-lowest: var(--hf-bg-card);
+  --color-on-tertiary-container: var(--hf-ink);
+  --color-surface-container-high: var(--hf-bg-elevated);
+  --color-primary-container: #ffcc00;
+  --color-on-primary-fixed-variant: var(--hf-ink);
+  --color-on-tertiary-fixed: var(--hf-ink);
+  --color-error-container: #ffdad6;
+  --color-on-secondary: var(--hf-ink);
+  --color-on-secondary-container: var(--hf-ink);
+  --color-on-primary-container: var(--hf-ink);
+  --color-on-tertiary-fixed-variant: var(--hf-ink);
+  --color-on-background: var(--hf-ink);
+  --color-primary-fixed-dim: #e6b800;
+  --color-on-error: #ffffff;
+  --color-tertiary-fixed: #d6e3ff;
+  --color-on-tertiary: #ffffff;
+  --color-on-secondary-fixed-variant: var(--hf-ink);
+  --color-inverse-surface: var(--hf-ink);
+  --color-primary: var(--hf-ink);
+  --color-secondary-fixed: #ffdad6;
+  --color-primary-fixed: #ffcc00;
+  --color-surface-bright: var(--hf-bg-elevated);
+  --color-outline: var(--hf-border);
+  --color-on-error-container: #93000a;
+  --color-tertiary-fixed-dim: #a8c6ff;
+  --color-on-primary: #ffffff;
+  --color-background: var(--hf-bg);
+  --color-tertiary: #0055ff;
+  --color-inverse-primary: var(--hf-bg);
+  --color-outline-variant: #d0cbc3;
+  --color-surface-dim: var(--hf-bg-sidebar);
+  --color-on-secondary-fixed: var(--hf-ink);
+  --color-secondary-fixed-dim: #ffb3ab;
+  --color-inverse-on-surface: var(--hf-bg);
+  --color-surface: var(--hf-bg);
+  --color-on-surface-variant: var(--hf-ink-muted);
+  --color-tertiary-container: #d6e3ff;
+  --color-error: #cc0000;
+  --color-surface-container-highest: var(--hf-bg-elevated);
+  --color-secondary: #e63b2e;
+  --color-on-surface: var(--hf-ink);
+
+  --color-ink: var(--hf-ink);
+  --color-ink-muted: var(--hf-ink-muted);
+  --color-hf-card: var(--hf-bg-card);
+  --color-hf-elevated: var(--hf-bg-elevated);
+}
+
+html.dark {
+  --color-outline-variant: #3f3f46;
+  --color-tertiary-container: #1e3a5f;
+  --color-secondary-container: #5c2018;
+}
+
+.bauhaus-shadow {
+  box-shadow: 6px 6px 0px 0px var(--hf-shadow);
+}
+
+.bauhaus-shadow-sm {
+  box-shadow: 4px 4px 0px 0px var(--hf-shadow);
+}
+
+.bauhaus-border {
+  border: 4px solid var(--hf-border);
+}
+
+.bauhaus-border-b {
+  border-bottom: 4px solid var(--hf-border);
+}
+
+.bg-grid {
+  background-size: 32px 32px;
+  background-image:
+    linear-gradient(to right, var(--hf-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--hf-grid-line) 1px, transparent 1px);
+}
+
+.bg-grid-light {
+  background-size: 32px 32px;
+  background-image:
+    linear-gradient(to right, var(--hf-grid-line-light) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--hf-grid-line-light) 1px, transparent 1px);
+}
+
+body {
+  background-color: var(--hf-bg);
+  color: var(--hf-ink);
+  font-family: "Inter", sans-serif;
+  margin: 0;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--hf-scrollbar-track);
+  border-left: 4px solid var(--hf-border);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--hf-accent-yellow);
+  border: 4px solid var(--hf-border);
+}
+
+.reactive-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.reactive-card:hover {
+  transform: translate(-3px, -3px);
+  box-shadow: 9px 9px 0px 0px var(--hf-shadow);
+}
+
+/* ── Dark mode: remap hardcoded light-theme Tailwind utilities ── */
+
+/* Backgrounds */
+html.dark [class*="bg-[#f5f0e8]"],
+html.dark [class*="bg-[#f5f5f5]"] {
+  background-color: var(--hf-bg) !important;
+}
+
+html.dark [class*="bg-[#faf7f2]"] {
+  background-color: var(--hf-bg-elevated) !important;
+}
+
+html.dark [class*="bg-[#eee9e0]"],
+html.dark [class*="bg-[#fcfbfa]"] {
+  background-color: var(--hf-bg-sidebar) !important;
+}
+
+html.dark [class*="bg-[#e8e3da]"] {
+  background-color: var(--hf-bg-elevated) !important;
+}
+
+html.dark [class*="bg-zinc-50"],
+html.dark [class*="bg-zinc-100"],
+html.dark [class*="bg-zinc-200"] {
+  background-color: var(--hf-bg-elevated) !important;
+}
+
+html.dark [class~="bg-white"]:not([class*="hover:bg-white"]) {
+  background-color: var(--hf-bg-card) !important;
+}
+
+/* Primary body text — keep black on yellow accent surfaces */
+html.dark
+  :is(
+    [class*="text-[#1a1a1a]"],
+    [class*="text-black"],
+    [class*="text-zinc-900"],
+    [class*="text-zinc-800"]
+  ):not([class*="bg-[#1a1a1a]"]):not([class*="bg-[#ffcc00]"]):not([class*="bg-black"]) {
+  color: var(--hf-ink) !important;
+}
+
+html.dark [class*="text-zinc-500"],
+html.dark [class*="text-zinc-600"],
+html.dark [class*="text-zinc-700"] {
+  color: var(--hf-ink-muted) !important;
+}
+
+html.dark [class*="text-zinc-400"],
+html.dark [class*="text-zinc-300"] {
+  color: #71717a !important;
+}
+
+/* Yellow accent surfaces always use dark ink (parent or self) */
+html.dark [class*="bg-[#ffcc00]"] {
+  color: #1a1a1a;
+}
+
+html.dark
+  [class*="bg-[#ffcc00]"]
+  :is(
+    [class*="text-[#1a1a1a]"],
+    [class*="text-black"],
+    [class*="text-zinc-900"],
+    [class*="text-zinc-800"],
+    [class*="text-zinc-500"],
+    [class*="text-zinc-600"],
+    [class*="text-zinc-700"],
+    [class*="text-primary"]
+  ):not([class*="bg-[#1a1a1a]"]):not([class*="bg-black"]) {
+  color: #1a1a1a !important;
+}
+
+/* Placeholders & text selection */
+html.dark [class*="placeholder:text-[#1a1a1a]"]::placeholder,
+html.dark [class*="placeholder:text-zinc-400"]::placeholder,
+html.dark [class*="placeholder:text-zinc-300"]::placeholder,
+html.dark [class*="placeholder:text-primary"]::placeholder {
+  color: color-mix(in srgb, var(--hf-ink) 35%, transparent) !important;
+}
+
+html.dark [class*="selection:text-[#1a1a1a]"] ::selection,
+html.dark [class*="selection:text-[#1a1a1a]"]::selection {
+  color: var(--hf-ink) !important;
+}
+
+/* Hover text on accent buttons */
+html.dark [class*="hover:text-black"]:hover,
+html.dark [class*="hover:text-[#1a1a1a]"]:hover {
+  color: #1a1a1a !important;
+}
+
+/* Borders */
+html.dark [class*="border-black"],
+html.dark [class*="border-[#1a1a1a]"] {
+  border-color: var(--hf-border) !important;
+}
+
+html.dark [class*="border-zinc-100"],
+html.dark [class*="border-zinc-200"],
+html.dark [class*="border-zinc-300"] {
+  border-color: #3f3f46 !important;
+}
+
+/* Form controls */
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: var(--hf-bg-input);
+  color: var(--hf-ink);
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: color-mix(in srgb, var(--hf-ink) 35%, transparent);
+}
+
+/* Layout regions */
+html.dark #root,
+html.dark #authenticated-workspace {
+  color: var(--hf-ink);
+}
+
+html.dark #footer-brutalist {
+  background-color: #050505 !important;
+  border-top-color: var(--hf-accent-yellow) !important;
+}
+
+html.dark main.bg-white,
+html.dark main[class*="bg-white"] {
+  background-color: var(--hf-bg-card) !important;
+}
+
+html.dark [class*="hover:bg-white"]:hover,
+html.dark [class*="hover:bg-zinc-100"]:hover {
+  background-color: var(--hf-bg-elevated) !important;
+}
+
+html.dark [class*="shadow-["][class*="#1a1a1a]"],
+html.dark [class*="shadow-["][class*="#101010]"],
+html.dark [class*="shadow-["][class*="#ffffff]"] {
+  --tw-shadow-color: var(--hf-shadow);
+}
+
+/* Markdown / prose blocks inside cards */
+html.dark .prose,
+html.dark [class*="prose"] {
+  color: var(--hf-ink);
+}
+
+html.dark .prose :where(p, li, h1, h2, h3, h4, strong, em, blockquote) {
+  color: inherit;
+}

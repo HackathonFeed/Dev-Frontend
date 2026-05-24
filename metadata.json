@@ -1,0 +1,6 @@
+{
+  "name": "HackathonFeed",
+  "description": "A high-contrast Neo-Brutalist hackathon aggregator, application milestone tracker, and real-time AI idea validator powered by the Gemini 3.5 Flash neural engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
