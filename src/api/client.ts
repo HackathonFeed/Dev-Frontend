@@ -1,12 +1,16 @@
 import type { APIResponse } from './types';
 
-export const API_ORIGIN =
-  import.meta.env.VITE_API_ORIGIN ??
-  import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/v1\/?$/i, '') ??
-  '';
+// Production: always same-origin proxy (Express → BACKEND_URL). Direct cross-origin
+// calls fail when CORS is misconfigured or the API is cold-starting.
+export const API_BASE = import.meta.env.PROD
+  ? '/api/v1'
+  : (import.meta.env.VITE_API_BASE_URL ?? '/api/v1');
 
-export const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
+export const API_ORIGIN = import.meta.env.PROD
+  ? ''
+  : (import.meta.env.VITE_API_ORIGIN ??
+    import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/v1\/?$/i, '') ??
+    '');
 
 const TOKEN_KEYS = {
   access: 'access_token',
@@ -115,15 +119,21 @@ export const tokenStorage = {
   },
 };
 
-export async function checkHealth(): Promise<boolean> {
-  try {
-    const healthUrl = API_ORIGIN
-      ? `${API_ORIGIN.replace(/\/$/, '')}/health`
-      : '/health';
-    const res = await fetch(healthUrl);
-    const json = await res.json();
-    return json?.data?.status === 'ok' || json?.status === 'ok';
-  } catch {
-    return false;
+export async function checkHealth(retries = 2): Promise<boolean> {
+  // Verify full stack: Express proxy → FastAPI (not just /health, which can pass while /api/v1 fails)
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const res = await fetch(`${API_BASE}/hackathons?page=1&page_size=1`);
+      const json = await res.json();
+      if (json?.success && json?.data?.items) {
+        return true;
+      }
+    } catch {
+      // Free-tier Render may be cold-starting (~30–60s)
+    }
+    if (attempt < retries) {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+    }
   }
+  return false;
 }

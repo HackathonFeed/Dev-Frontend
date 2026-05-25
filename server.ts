@@ -238,7 +238,11 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api/') || req.path === '/health' || req.path.startsWith('/uploads')) {
+        next();
+        return;
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
