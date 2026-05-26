@@ -31,6 +31,7 @@ import {
   Twitter,
   LogOut,
   Bookmark,
+  Copy,
   Loader2
 } from 'lucide-react';
 import { Hackathon, TrackedApplication, ValidatorResponse } from './types';
@@ -61,7 +62,7 @@ import {
   updateProfile,
   getAdminStats,
   triggerScrape,
-  checkHealth,
+  buildPublicProfileUrl,
   type Bookmark as ApiBookmark,
 } from './api';
 import { mapHackathonsFromApi } from './lib/mapHackathon';
@@ -250,6 +251,7 @@ export default function App() {
   const [authTransitionMode, setAuthTransitionMode] = useState<AuthMode | null>(null);
   const [pendingTab, setPendingTab] = useState<'tracker' | 'explore' | 'validator' | null>(null);
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>(() => dashboardTabFromPath(window.location.pathname));
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [adminNotice, setAdminNotice] = useState<string | null>(null);
 
@@ -261,7 +263,6 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Backend connection & pagination
-  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [hackathonPage, setHackathonPage] = useState(1);
   const [bookmarkIds, setBookmarkIds] = useState<Set<string>>(new Set());
   const [savedBookmarks, setSavedBookmarks] = useState<ApiBookmark[]>([]);
@@ -278,6 +279,7 @@ export default function App() {
   const [socialHandles, setSocialHandles] = useState<SocialHandles>(EMPTY_SOCIAL_HANDLES);
   const [socialSaveMessage, setSocialSaveMessage] = useState<string | null>(null);
   const [socialSaveLoading, setSocialSaveLoading] = useState(false);
+  const [profileLinkCopied, setProfileLinkCopied] = useState(false);
 
   const applyRoute = useCallback((pathname = window.location.pathname) => {
     const profileUsername = parsePublicProfileUsername();
@@ -388,9 +390,12 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    checkHealth().then(setBackendOnline);
-  }, []);
+  const copyPublicProfileUrl = async () => {
+    if (!user?.username) return;
+    await navigator.clipboard.writeText(buildPublicProfileUrl(user.username));
+    setProfileLinkCopied(true);
+    window.setTimeout(() => setProfileLinkCopied(false), 2000);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -1056,15 +1061,94 @@ export default function App() {
 
   if (isAuthenticated) {
     const displayUsername = user?.name?.toUpperCase() ?? user?.email?.split('@')[0].toUpperCase() ?? 'HACKER_01';
+    const mobileNavItems = [
+      { label: 'Dashboard', path: '/dashboard', tab: 'dashboard' as const, icon: <LayoutGrid className="w-4 h-4 shrink-0" strokeWidth={3} /> },
+      { label: 'Hackathons', path: '/hackathons', tab: 'hackathons' as const, icon: <Trophy className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+      { label: 'Tracking', path: '/tracking', tab: 'projects' as const, icon: <CheckSquare className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+      { label: 'Gallery', path: '/project-gallery', tab: 'gallery' as const, icon: <Layers className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+      { label: 'AI Validate', path: '/ai-validate', tab: 'team' as const, icon: <Sparkles className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+      { label: 'Settings', path: '/settings', tab: 'settings' as const, icon: <Settings className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+    ];
+    const currentMobileNavItem = mobileNavItems.find((item) => item.tab === dashboardTab) ?? mobileNavItems[0];
 
     return (
       <>
-      <div id="authenticated-workspace" className="min-h-screen bg-background text-primary font-sans antialiased flex flex-col md:flex-row selection:bg-[#ffcc00] selection:text-[#1a1a1a]">
+      <div id="authenticated-workspace" className="min-h-screen bg-background text-primary font-sans antialiased flex flex-col lg:flex-row selection:bg-[#ffcc00] selection:text-[#1a1a1a]">
+        <header className="lg:hidden sticky top-0 z-50 bg-[#eee9e0] border-b-4 border-black">
+          <div className="px-4 py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((open) => !open)}
+                aria-expanded={mobileMenuOpen}
+                aria-label="Toggle workspace menu"
+                className="bg-[#ffcc00] border-2 border-black px-3 py-2 shadow-[2px_2px_0px_0px_#101010] font-headline font-black text-xl leading-none shrink-0"
+              >
+                {mobileMenuOpen ? '×' : '☰'}
+              </button>
+              <div className="min-w-0">
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/dashboard')}
+                  className="font-headline font-black text-lg uppercase tracking-tighter text-[#1a1a1a] bg-transparent border-none cursor-pointer block truncate"
+                >
+                  HackathonFeed
+                </button>
+                <p className="font-mono text-[9px] uppercase font-bold text-zinc-500 truncate">
+                  {currentMobileNavItem.label}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={goToProfile}
+                className="flex items-center gap-2 bg-white border-2 border-black px-2 py-2 shadow-[2px_2px_0px_0px_#101010]"
+                title="View your public profile"
+              >
+                {user && (
+                  <ProfileAvatar
+                    name={user.name}
+                    avatarUrl={user.avatar_url}
+                    size="sm"
+                    showOnlineBadge
+                  />
+                )}
+                <span className="sr-only">Open profile</span>
+              </button>
+            </div>
+          </div>
+          {mobileMenuOpen && (
+            <nav className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-2 animate-fadeIn">
+              {mobileNavItems.map((item) => (
+                <button
+                  key={item.path}
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    navigateTo(item.path);
+                  }}
+                  className={`w-full inline-flex items-center justify-between gap-3 border-2 border-black px-4 py-3 font-headline font-black text-xs uppercase tracking-wide shadow-[2px_2px_0px_0px_#101010] ${
+                    dashboardTab === item.tab
+                      ? 'bg-[#ffcc00] text-[#1a1a1a]'
+                      : 'bg-white text-[#1a1a1a]'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    {item.icon}
+                    {item.label}
+                  </span>
+                  <span className="text-[10px] opacity-40">»</span>
+                </button>
+              ))}
+            </nav>
+          )}
+        </header>
         
         {/* ========================================================
             LEFT SIDEBAR NAVIGATION
             ======================================================== */}
-        <aside className="w-full md:w-[280px] bg-[#eee9e0] border-b-4 md:border-b-0 md:border-r-4 border-black flex flex-col justify-between p-6 shrink-0 md:h-screen md:sticky md:top-0 overflow-y-auto z-40">
+        <aside className="hidden lg:flex w-[280px] bg-[#eee9e0] border-r-4 border-black flex-col justify-between p-6 shrink-0 h-screen sticky top-0 overflow-y-auto z-40">
           <div>
             <div className="flex items-center gap-3 border-b-2 border-black pb-4">
               <span className="w-5 h-5 bg-[#e63b2e] border-2 border-[#1a1a1a]"></span>
@@ -1202,7 +1286,7 @@ export default function App() {
         {/* ========================================================
             RIGHT CONTENT AREA / MAIN BODY PANELS
             ======================================================== */}
-        <main className="flex-1 min-h-screen bg-background p-6 md:p-10 overflow-y-auto max-w-[1440px] mx-auto w-full">
+        <main className="flex-1 min-h-screen bg-background p-4 sm:p-6 lg:p-10 overflow-y-auto max-w-[1440px] mx-auto w-full min-w-0">
           
           {/* 
             --------------------------------------------------------
@@ -1229,21 +1313,15 @@ export default function App() {
             <div className="space-y-8 animate-fadeIn">
               
               {/* Header block */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-4 border-black pb-4 mb-8">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b-4 border-black pb-4 mb-8 gap-4">
                 <div>
                   <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
                     BROWSE ACTIVE CYBER FORGES
                   </span>
-                  <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter mt-2">
+                  <h2 className="font-headline font-black text-3xl sm:text-4xl md:text-5xl uppercase tracking-tighter mt-2 break-words">
                     HACKATHONS ({hackathonTotal.toLocaleString()})
                   </h2>
                 </div>
-                <button
-                  onClick={() => setIsAddingHackathon(!isAddingHackathon)}
-                  className="bg-[#ffcc00] border-3 border-black py-2.5 px-6 font-headline font-black text-xs uppercase mt-3 md:mt-0 tracking-wider shadow-[3px_3px_0px_0px_#101010] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none transition-all cursor-pointer"
-                >
-                  {isAddingHackathon ? 'CLOSE HOST DRAWER ✕' : '+ CUSTOM EVENT FORGE'}
-                </button>
               </div>
 
               {/* Add Custom Hackathon Drawer form if toggled */}
@@ -1349,7 +1427,7 @@ export default function App() {
                   <button onClick={clearHackathonFilters} className="block mx-auto mt-2 underline text-[#0055ff]">Wipe search parameters</button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
                   {filteredHackathons.map((hack) => (
                     <div 
                       key={hack.id}
@@ -1362,19 +1440,19 @@ export default function App() {
                           setSelectedHackathonId(hack.id);
                         }
                       }}
-                      className="bg-white border-3 border-black p-6 flex flex-col justify-between gap-6 hover:translate-y-[-2px] transition-all cursor-pointer"
+                      className="bg-white border-3 border-black p-4 sm:p-6 flex flex-col justify-between gap-5 sm:gap-6 hover:translate-y-[-2px] transition-all cursor-pointer min-w-0"
                       style={{ boxShadow: `6px 6px 0px 0px ${hack.cardShadow}` }}
                     >
-                      <div className="flex justify-between items-start border-b border-zinc-100 pb-3">
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 border-b border-zinc-100 pb-3">
                         <HackathonStatusBadge hack={hack} compact />
-                        <div className="text-right">
+                        <div className="sm:text-right">
                           <p className="font-mono text-[9px] uppercase text-zinc-400 font-bold leading-none">ALLOCATED VALUE</p>
-                          <p className="font-headline font-black text-xl text-[#0055ff]">{hack.prizePool}</p>
+                          <p className="font-headline font-black text-lg sm:text-xl text-[#0055ff] break-words">{hack.prizePool}</p>
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <h3 className="font-headline font-black text-2xl uppercase tracking-tight text-[#1a1a1a]">
+                        <h3 className="font-headline font-black text-xl sm:text-2xl uppercase tracking-tight text-[#1a1a1a] break-words">
                           {hack.title}
                         </h3>
                         <p className="text-xs font-semibold text-zinc-500 uppercase leading-snug">
@@ -1387,7 +1465,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="flex justify-between items-center border-t border-zinc-100 pt-4 flex-wrap gap-2">
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center border-t border-zinc-100 pt-4 gap-3">
                         <div className="flex flex-wrap gap-1">
                           {hack.tags.map((t) => (
                             <span key={t} className="bg-zinc-100 font-mono text-[9px] font-extrabold px-1.5 py-0.5 border border-zinc-300">
@@ -1395,7 +1473,7 @@ export default function App() {
                             </span>
                           ))}
                         </div>
-                        <div className="flex gap-2 items-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex flex-wrap gap-2 items-center sm:justify-end" onClick={(e) => e.stopPropagation()}>
                           {renderBookmarkButton(hack.id)}
                           {hack.url && (
                             <a
@@ -1416,7 +1494,7 @@ export default function App() {
                               deadline: hack.deadline,
                               url: hack.url,
                             },
-                            'bg-[#0055ff] text-white font-headline font-black text-xs uppercase px-4 py-2 border-2 border-black shadow-[2px_2px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-all cursor-pointer',
+                            'flex-1 sm:flex-none bg-[#0055ff] text-white font-headline font-black text-xs uppercase px-4 py-2 border-2 border-black shadow-[2px_2px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-all cursor-pointer',
                           )}
                         </div>
                       </div>
@@ -1449,17 +1527,31 @@ export default function App() {
           )}
 
           {dashboardTab === 'gallery' && (
-            <ProjectsTimelineView
-              trackedApps={trackedApps}
-              view="gallery"
-              stepActionLoading={stepActionLoading}
-              onCompleteStep={completeStep}
-              onUndoLastStep={undoLastStep}
-              onToggleMilestone={toggleMilestone}
-              onAddMilestone={handleAddMilestone}
-              onAddNote={addNote}
-              onDeleteProject={handleDeleteTracked}
-            />
+            <div className="space-y-8 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b-4 border-black pb-4 mb-8 gap-4">
+                <div>
+                  <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
+                    Project archive
+                  </span>
+                  <h2 className="font-headline font-black text-3xl sm:text-4xl md:text-5xl uppercase tracking-tighter mt-2">
+                    Project Gallery
+                  </h2>
+                </div>
+                <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-sm sm:text-right leading-tight">
+                  A dedicated showcase for shipped hackathon projects is on the way.
+                </p>
+              </div>
+
+              <div className="bg-white border-4 border-black p-6 sm:p-10 md:p-16 shadow-[6px_6px_0px_0px_#ffcc00] text-center max-w-xl mx-auto">
+                <Layers className="w-12 h-12 mx-auto text-[#0055ff] mb-4" strokeWidth={2.5} />
+                <h3 className="font-headline font-black text-3xl uppercase tracking-tight mb-3">
+                  Coming soon
+                </h3>
+                <p className="font-mono text-xs uppercase font-bold text-zinc-500">
+                  Project Gallery is being built. Use Tracking for now to manage active projects.
+                </p>
+              </div>
+            </div>
           )}
 
           {/* 
@@ -1469,21 +1561,21 @@ export default function App() {
           */}
           {dashboardTab === 'team' && (
             <div className="space-y-8 animate-fadeIn">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-4 border-black pb-4 mb-8">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b-4 border-black pb-4 mb-8 gap-4">
                 <div>
                   <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
                     Neural analysis engine
                   </span>
-                  <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter mt-2">
+                  <h2 className="font-headline font-black text-3xl sm:text-4xl md:text-5xl uppercase tracking-tighter mt-2">
                     AI Validate
                   </h2>
                 </div>
-                <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-sm text-center md:text-right mt-2 md:mt-0 leading-tight">
+                <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-sm sm:text-right leading-tight">
                   Run your hackathon idea through AI jurors for scores, critique, and upgrade suggestions.
                 </p>
               </div>
 
-              <div className="bg-white border-4 border-black p-10 md:p-16 shadow-[6px_6px_0px_0px_#0055ff] text-center max-w-xl mx-auto">
+              <div className="bg-white border-4 border-black p-6 sm:p-10 md:p-16 shadow-[6px_6px_0px_0px_#0055ff] text-center max-w-xl mx-auto">
                 <Sparkles className="w-12 h-12 mx-auto text-[#0055ff] mb-4" strokeWidth={2.5} />
                 <h3 className="font-headline font-black text-3xl uppercase tracking-tight mb-3">
                   Coming soon
@@ -1503,21 +1595,21 @@ export default function App() {
           {dashboardTab === 'settings' && (
             <div className="space-y-8 animate-fadeIn">
               
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-4 border-black pb-4 mb-8">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b-4 border-black pb-4 mb-8 gap-4">
                 <div>
                   <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
                     SYSTEM TUNE CONTROLS
                   </span>
-                  <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter mt-2">
+                  <h2 className="font-headline font-black text-3xl sm:text-4xl md:text-5xl uppercase tracking-tighter mt-2">
                     WORKSPACE SETTINGS
                   </h2>
                 </div>
-                <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-sm text-center md:text-right mt-2 md:mt-0 leading-tight">
+                <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-sm sm:text-right leading-tight">
                   Manage your profile photo, social handles, and session.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8">
                 
                 {user && (
                   <ProfilePhotoSettings
@@ -1528,7 +1620,49 @@ export default function App() {
                   />
                 )}
 
-                <div className="bg-white border-3 border-black p-6 shadow-[4px_4px_0px_0px_#101010] rounded-[4px] space-y-4 md:col-span-2">
+                {user && (
+                  <div className="bg-white border-3 border-black p-4 sm:p-6 shadow-[4px_4px_0px_0px_#101010] rounded-[4px] space-y-4 md:col-span-2">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-100 pb-2">
+                      <div>
+                        <h3 className="font-headline font-black text-lg uppercase text-[#0055ff]">
+                          Public Profile URL
+                        </h3>
+                        <p className="font-mono text-[10px] uppercase font-bold text-zinc-500 mt-1">
+                          Share this like a LeetCode profile. Anyone can view it without logging in.
+                        </p>
+                      </div>
+                      <span className="font-mono text-[10px] uppercase bg-black text-[#ffcc00] border-2 border-black py-1 px-2.5 font-bold w-fit">
+                        @{user.username}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col lg:flex-row gap-3">
+                      <div className="flex-1 min-w-0 bg-zinc-50 border-2 border-black px-3 py-3 font-mono text-[11px] font-bold text-zinc-700 break-all">
+                        {buildPublicProfileUrl(user.username)}
+                      </div>
+                      <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row gap-2">
+                        <button
+                          type="button"
+                          onClick={copyPublicProfileUrl}
+                          className="inline-flex items-center justify-center gap-2 bg-[#ffcc00] text-black border-2 border-black px-5 py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer"
+                        >
+                          {profileLinkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          {profileLinkCopied ? 'Copied' : 'Copy'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={goToProfile}
+                          className="inline-flex items-center justify-center gap-2 bg-black text-white border-2 border-black px-5 py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#ffcc00] hover:bg-[#0055ff] transition-colors cursor-pointer"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Open
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-white border-3 border-black p-4 sm:p-6 shadow-[4px_4px_0px_0px_#101010] rounded-[4px] space-y-4 md:col-span-2">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-100 pb-2">
                     <h3 className="font-headline font-black text-lg uppercase text-[#0055ff]">Social Media Handles</h3>
                     {socialSaveMessage && (
@@ -1616,12 +1750,12 @@ export default function App() {
                     </label>
                   </div>
 
-                  <div className="flex justify-end">
+                  <div className="flex justify-stretch sm:justify-end">
                     <button
                       type="button"
                       onClick={saveSocialHandles}
                       disabled={socialSaveLoading}
-                      className="bg-[#ffcc00] text-black border-2 border-black px-5 py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait inline-flex items-center gap-2"
+                      className="w-full sm:w-auto justify-center bg-[#ffcc00] text-black border-2 border-black px-5 py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait inline-flex items-center gap-2"
                     >
                       {socialSaveLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       {socialSaveLoading ? 'Saving...' : 'Save handles'}
@@ -1629,7 +1763,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="bg-white border-3 border-black p-6 shadow-[4px_4px_0px_0px_#101010] rounded-[4px] space-y-4 md:col-span-2">
+                <div className="bg-white border-3 border-black p-4 sm:p-6 shadow-[4px_4px_0px_0px_#101010] rounded-[4px] space-y-4 md:col-span-2">
                   <h3 className="font-headline font-black text-lg uppercase text-[#e63b2e] border-b border-zinc-100 pb-2">Session</h3>
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <p className="font-mono text-[11px] uppercase font-bold text-zinc-600">
@@ -1638,7 +1772,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="inline-flex items-center justify-center gap-2 bg-[#e63b2e] text-white border-2 border-black px-5 py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#101010] hover:bg-black transition-colors cursor-pointer"
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#e63b2e] text-white border-2 border-black px-5 py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#101010] hover:bg-black transition-colors cursor-pointer"
                     >
                       <LogOut className="w-4 h-4" strokeWidth={2.5} />
                       Log out
@@ -3246,11 +3380,6 @@ export default function App() {
               {/* Left Column: Visual Brand Identity */}
               <div className="md:col-span-6 flex flex-col justify-between pt-10 gap-8">
                 <div className="space-y-6">
-                  {/* Yellow logo element */}
-                  <div className="w-16 h-16 bg-[#ffcc00] border-3 border-black rounded-2xl flex items-center justify-center shadow-[3px_3px_0px_0px_#1a1a1a] select-none">
-                    <span className="font-headline font-black text-2xl text-primary">HF</span>
-                  </div>
-
                   <div>
                     <h2 className="font-headline font-black text-5xl md:text-[68px] leading-[0.85] tracking-tighter text-[#1a1a1a] uppercase select-none">
                       HACKATHON
@@ -3265,22 +3394,33 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* Cyberpunk circuit wire / terminal diagram representation */}
-                <div className="bg-[#1a1a1a] p-4 border-3 border-[#1a1a1a] shadow-[4px_4px_0px_0px_#ffcc00] font-mono text-[10px] text-zinc-400 select-none overflow-hidden h-40 relative flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center gap-1.5 border-b border-zinc-800 pb-2 mb-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#e63b2e] block"></span>
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#ffcc00] block"></span>
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 block"></span>
-                      <span className="ml-1 text-zinc-500">FEED_STREAM://ACTIVE_PROT</span>
-                    </div>
-                    <p className="text-[#ffcc00] font-bold">» SYS.INIT: PROTOCOL_GATE_V3_5</p>
-                    <p className="opacity-75">» CONSTRUCTING WEIMAR_BUILD_ENGINE_v42.TS...</p>
-                    <p className="opacity-50">» ESTABLISHING PERSISTENT CLOUD SECURITY CODES...</p>
+                <div className="bg-[#1a1a1a] p-4 border-3 border-black shadow-[4px_4px_0px_0px_#ffcc00] font-mono text-[11px] text-zinc-300 select-none overflow-hidden min-h-[168px] flex flex-col">
+                  <div className="flex items-center gap-1.5 border-b border-zinc-800 pb-2 mb-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#e63b2e] block" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#ffcc00] block" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 block" />
+                    <span className="ml-1 text-zinc-500 text-[10px]">hackathonfeed — zsh</span>
                   </div>
-                  <div className="flex justify-between items-center text-zinc-600 font-extrabold text-[9px]">
-                    <span>SECURE CONSOLE</span>
-                    <span>v3.5 // AUTHWAY</span>
+                  <div className="space-y-2 flex-1">
+                    <p>
+                      <span className="text-emerald-400">➜</span>{' '}
+                      <span className="text-zinc-500">~/hackathons</span>{' '}
+                      <span className="text-[#ffcc00] font-bold">hackathonfeed add .</span>
+                    </p>
+                    <p>
+                      <span className="text-emerald-400">➜</span>{' '}
+                      <span className="text-zinc-500">~/hackathons</span>{' '}
+                      <span className="text-white">hackathonfeed commit -m &quot;&quot;</span>
+                    </p>
+                    <p>
+                      <span className="text-emerald-400">➜</span>{' '}
+                      <span className="text-zinc-500">~/hackathons</span>{' '}
+                      <span className="text-[#ffcc00] font-bold">hackathonfeed push</span>
+                    </p>
+                    <p className="text-zinc-600 pt-1">
+                      <span className="text-emerald-400">➜</span>{' '}
+                      <span className="inline-block w-2 h-3.5 bg-[#ffcc00] animate-pulse align-middle" />
+                    </p>
                   </div>
                 </div>
               </div>
@@ -3390,11 +3530,6 @@ export default function App() {
                   </button>
 
                 </form>
-
-                <p className="mt-6 font-mono text-[10px] uppercase text-primary/50 text-center">
-                  Backend: {backendOnline === null ? 'checking...' : backendOnline ? 'connected' : 'offline — check hackathonfeed-api.onrender.com'}
-                </p>
-
               </div>
 
             </div>

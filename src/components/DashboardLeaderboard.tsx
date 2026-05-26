@@ -16,6 +16,38 @@ interface DashboardLeaderboardProps {
   trackedApps: TrackedApplication[];
 }
 
+const LEADERBOARD_CACHE_KEY = 'hackathon_feed_leaderboard_cache';
+const LEADERBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface LeaderboardCache {
+  entries: LeaderboardEntry[];
+  cachedAt: number;
+}
+
+function readLeaderboardCache(): LeaderboardEntry[] {
+  try {
+    const raw = window.localStorage.getItem(LEADERBOARD_CACHE_KEY);
+    if (!raw) return [];
+    const cache = JSON.parse(raw) as Partial<LeaderboardCache>;
+    if (!Array.isArray(cache.entries) || typeof cache.cachedAt !== 'number') return [];
+    if (Date.now() - cache.cachedAt > LEADERBOARD_CACHE_TTL_MS) return cache.entries;
+    return cache.entries;
+  } catch {
+    return [];
+  }
+}
+
+function writeLeaderboardCache(entries: LeaderboardEntry[]) {
+  try {
+    window.localStorage.setItem(
+      LEADERBOARD_CACHE_KEY,
+      JSON.stringify({ entries, cachedAt: Date.now() }),
+    );
+  } catch {
+    // Cache is a performance optimization; ignore storage failures.
+  }
+}
+
 function rankDisplay(rank: number, large = false): React.ReactNode {
   const iconClass = large ? 'w-6 h-6' : 'w-4 h-4';
   if (rank === 1) return <Crown className={`${iconClass} text-[#ffcc00]`} strokeWidth={2.5} />;
@@ -32,8 +64,9 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
   currentUser,
   trackedApps,
 }) => {
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [loadingBoard, setLoadingBoard] = useState(true);
+  const cachedLeaderboard = useMemo(() => readLeaderboardCache(), []);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(cachedLeaderboard);
+  const [loadingBoard, setLoadingBoard] = useState(cachedLeaderboard.length === 0);
   const [error, setError] = useState<string | null>(null);
 
   const localCurrentUserStats = useMemo(
@@ -62,33 +95,36 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
   );
 
   const loadLeaderboard = useCallback(async () => {
-    setLoadingBoard(true);
     setError(null);
     try {
       const entries = await getLeaderboard(50);
       if (entries.length > 0) {
-        setLeaderboard(
-          entries.map((entry) => ({
-            user_id: entry.user_id,
-            name: entry.name,
-            username: entry.username ?? null,
-            avatar_url: entry.avatar_url ?? null,
-            participations: entry.participations,
-            submissions: entry.submissions,
-            wins: entry.wins,
-            rank: entry.rank,
-          })),
-        );
+        const normalizedEntries = entries.map((entry) => ({
+          user_id: entry.user_id,
+          name: entry.name,
+          username: entry.username ?? null,
+          avatar_url: entry.avatar_url ?? null,
+          participations: entry.participations,
+          submissions: entry.submissions,
+          wins: entry.wins,
+          rank: entry.rank,
+        }));
+        setLeaderboard(normalizedEntries);
+        writeLeaderboardCache(normalizedEntries);
       } else {
         const localEntry = buildLocalLeaderboardEntry(currentUser, trackedApps);
-        setLeaderboard(localEntry.participations > 0 ? [localEntry] : []);
+        setLeaderboard((previous) => (
+          previous.length > 0 ? previous : localEntry.participations > 0 ? [localEntry] : []
+        ));
       }
     } catch (err) {
       const localEntry = buildLocalLeaderboardEntry(currentUser, trackedApps);
-      setLeaderboard(localEntry.participations > 0 ? [localEntry] : []);
+      setLeaderboard((previous) => (
+        previous.length > 0 ? previous : localEntry.participations > 0 ? [localEntry] : []
+      ));
       setError(
         err instanceof ApiError
-          ? 'Global leaderboard unavailable — showing your local stats.'
+          ? 'Global leaderboard unavailable — showing cached data.'
           : 'Could not load leaderboard.',
       );
     } finally {
@@ -102,7 +138,7 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 border-b-4 border-black pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 border-b-4 border-black pb-4">
         <div>
           <h2 className="font-headline font-black text-2xl md:text-3xl uppercase tracking-tighter text-[#1a1a1a] flex items-center gap-3">
             <Trophy className="w-7 h-7 text-[#ffcc00]" strokeWidth={2.5} />
@@ -124,10 +160,10 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-8 items-start">
         {/* Left — your hacker stats */}
         <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-6">
-          <div className="bg-white border-4 border-black p-6 shadow-[5px_5px_0px_0px_#0055ff]">
+          <div className="bg-white border-4 border-black p-4 sm:p-6 shadow-[5px_5px_0px_0px_#0055ff]">
             <p className="font-mono text-[9px] uppercase font-bold text-[#0055ff] tracking-wider">
               Your hacker profile
             </p>
@@ -156,8 +192,8 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="bg-[#ffcc00] border-3 border-black p-5 shadow-[4px_4px_0px_0px_#1a1a1a] flex items-center justify-between gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3">
+            <div className="bg-[#ffcc00] border-3 border-black p-4 sm:p-5 shadow-[4px_4px_0px_0px_#1a1a1a] flex items-center justify-between gap-4">
               <div>
                 <p className="font-mono text-[9px] uppercase font-bold text-[#1a1a1a]/60">Participated</p>
                 <p className="font-headline font-black text-4xl text-[#1a1a1a] mt-1">
@@ -167,7 +203,7 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
               <Target className="w-8 h-8 text-[#1a1a1a]/40 shrink-0" strokeWidth={2.5} />
             </div>
 
-            <div className="bg-[#0055ff] border-3 border-black p-5 shadow-[4px_4px_0px_0px_#1a1a1a] text-white flex items-center justify-between gap-4">
+            <div className="bg-[#0055ff] border-3 border-black p-4 sm:p-5 shadow-[4px_4px_0px_0px_#1a1a1a] text-white flex items-center justify-between gap-4">
               <div>
                 <p className="font-mono text-[9px] uppercase font-bold text-white/70">Submitted</p>
                 <p className="font-headline font-black text-4xl mt-1">
@@ -177,7 +213,7 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
               <CheckCircle2 className="w-8 h-8 text-white/40 shrink-0" strokeWidth={2.5} />
             </div>
 
-            <div className="bg-[#16a34a] border-3 border-black p-5 shadow-[4px_4px_0px_0px_#1a1a1a] text-white flex items-center justify-between gap-4">
+            <div className="bg-[#16a34a] border-3 border-black p-4 sm:p-5 shadow-[4px_4px_0px_0px_#1a1a1a] text-white flex items-center justify-between gap-4">
               <div>
                 <p className="font-mono text-[9px] uppercase font-bold text-white/70">Wins</p>
                 <p className="font-headline font-black text-4xl mt-1">
@@ -221,7 +257,7 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
                 return (
                   <div
                     key={`${entry.user_id}-${isCurrentUserPositionRow ? 'current-user' : 'top'}`}
-                    className={`relative bg-white border-3 border-black p-4 shadow-[3px_3px_0px_0px_#101010] flex items-center gap-4 transition-all ${
+                    className={`relative bg-white border-3 border-black p-3 sm:p-4 shadow-[3px_3px_0px_0px_#101010] flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 transition-all ${
                       isYou ? 'ring-2 ring-[#0055ff] bg-[#0055ff]/5' : ''
                     } ${isTopThree ? 'shadow-[4px_4px_0px_0px_#ffcc00]' : ''}`}
                   >
@@ -230,14 +266,15 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
                         Your position
                       </div>
                     )}
-                    <div className="w-12 h-12 shrink-0 bg-[#1a1a1a] border-2 border-black flex items-center justify-center text-white">
-                      {rankDisplay(entry.rank, isTopThree)}
-                    </div>
+                    <div className="w-full sm:w-auto flex items-center gap-3 min-w-0">
+                      <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 bg-[#1a1a1a] border-2 border-black flex items-center justify-center text-white">
+                        {rankDisplay(entry.rank, isTopThree)}
+                      </div>
 
-                    <ProfileAvatar name={entry.name} avatarUrl={avatarUrl} size="sm" />
+                      <ProfileAvatar name={entry.name} avatarUrl={avatarUrl} size="sm" />
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-headline font-black text-sm uppercase tracking-tight text-[#1a1a1a] truncate">
                           {entry.name}
                         </p>
@@ -246,15 +283,16 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
                             You
                           </span>
                         )}
+                        </div>
+                        {entry.username && (
+                          <p className="font-mono text-[9px] uppercase font-bold text-zinc-400 mt-0.5">
+                            @{entry.username}
+                          </p>
+                        )}
                       </div>
-                      {entry.username && (
-                        <p className="font-mono text-[9px] uppercase font-bold text-zinc-400 mt-0.5">
-                          @{entry.username}
-                        </p>
-                      )}
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="grid grid-cols-3 gap-2 w-full sm:w-auto sm:flex sm:items-center sm:shrink-0">
                       <div className="text-center border-2 border-black px-2.5 py-1.5 bg-[#ffcc00]/30 min-w-[52px]">
                         <p className="font-headline font-black text-base text-[#1a1a1a] leading-none">
                           {entry.participations}

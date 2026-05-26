@@ -93,14 +93,14 @@ function FilterSelect({
   };
 
   return (
-    <div className="flex flex-col gap-1 min-w-[140px] flex-1">
+    <div className="flex flex-col gap-1 min-w-0 flex-1">
       <label className="font-mono text-[9px] uppercase font-bold text-zinc-500">{label}</label>
       <details className="relative group">
-        <summary className="list-none bg-white border-2 border-black font-mono text-[10px] font-bold uppercase px-2 py-2 focus:outline-none cursor-pointer flex items-center justify-between gap-2">
+        <summary className="list-none bg-white border-2 border-black font-mono text-[10px] font-bold uppercase px-2 py-2 focus:outline-none cursor-pointer flex items-center justify-between gap-2 min-w-0">
           <span className="truncate">{summary}</span>
           <span className="text-xs group-open:rotate-180 transition-transform">v</span>
         </summary>
-        <div className="absolute z-30 mt-1 w-full max-h-60 overflow-y-auto bg-white border-2 border-black shadow-[3px_3px_0px_0px_#101010] p-1 space-y-1">
+        <div className="absolute z-30 mt-1 w-full min-w-[220px] max-h-60 overflow-y-auto bg-white border-2 border-black shadow-[3px_3px_0px_0px_#101010] p-1 space-y-1">
           <button
             type="button"
             onClick={() => onChange([])}
@@ -143,6 +143,7 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
   onClear,
   compact = false,
 }) => {
+  const [mobileFiltersOpen, setMobileFiltersOpen] = React.useState(false);
   const hasActiveFilters =
     values.search ||
     values.theme.length > 0 ||
@@ -165,10 +166,10 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
     ...themes.map((t) => ({ value: t.theme, label: `${t.theme} (${t.count})` })),
   ];
 
-  return (
-    <div className="bg-white border-3 border-black p-4 md:p-5 shadow-[3px_3px_0px_0px_#101010] space-y-4">
-      <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-        <div className="flex items-center gap-2">
+  const filterContent = (
+    <>
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <Filter className="w-4 h-4 shrink-0" />
           <span className="font-headline font-black text-sm uppercase">Filters</span>
           <span className="font-mono text-[10px] uppercase text-zinc-500 font-bold">
@@ -207,7 +208,7 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         <FilterSelect
           label="Theme"
           value={values.theme}
@@ -309,7 +310,90 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      <div className="sm:hidden bg-white border-3 border-black p-3 shadow-[3px_3px_0px_0px_#101010] space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Filter className="w-4 h-4 shrink-0" />
+            <div className="min-w-0">
+              <p className="font-headline font-black text-sm uppercase">Filters</p>
+              <p className="font-mono text-[9px] uppercase text-zinc-500 font-bold">
+                {loading ? 'Loading...' : `${total.toLocaleString()} results`}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileFiltersOpen(true)}
+            className="bg-[#ffcc00] border-2 border-black px-4 py-2 font-headline font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_#101010]"
+          >
+            Open filters
+          </button>
+        </div>
+        {hasActiveFilters && (
+          <div className="flex items-center justify-between gap-2 border-t-2 border-black pt-2">
+            <span className="font-mono text-[9px] uppercase font-bold text-zinc-500">
+              Filters active
+            </span>
+            <button
+              type="button"
+              onClick={onClear}
+              className="inline-flex items-center gap-1 font-mono text-[10px] uppercase font-bold text-[#e63b2e] bg-transparent border-none"
+            >
+              <X className="w-3 h-3" />
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="hidden sm:block bg-white border-3 border-black p-3 sm:p-4 md:p-5 shadow-[3px_3px_0px_0px_#101010] space-y-4 overflow-visible">
+        {filterContent}
+      </div>
+
+      {mobileFiltersOpen && (
+        <div
+          className="sm:hidden fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm p-4 flex items-end"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setMobileFiltersOpen(false)}
+        >
+          <div
+            className="w-full max-h-[88vh] overflow-y-auto bg-white border-4 border-black p-4 shadow-[6px_6px_0px_0px_#ffcc00] space-y-4 animate-fadeIn"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b-3 border-black pb-3">
+              <div>
+                <p className="font-headline font-black text-lg uppercase">Filters</p>
+                <p className="font-mono text-[9px] uppercase text-zinc-500 font-bold">
+                  {loading ? 'Loading...' : `${total.toLocaleString()} results`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileFiltersOpen(false)}
+                className="bg-black text-white border-2 border-black w-10 h-10 font-headline font-black text-xl"
+                aria-label="Close filters"
+              >
+                ×
+              </button>
+            </div>
+            {filterContent}
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen(false)}
+              className="w-full bg-[#ffcc00] border-2 border-black py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#101010]"
+            >
+              Show results
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

@@ -50,11 +50,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         {/* Left Column: Visual Brand Identity */}
         <div className="md:col-span-6 flex flex-col justify-between pt-10 gap-8">
           <div className="space-y-6">
-            {/* Yellow logo element */}
-            <div className="w-16 h-16 bg-[#ffcc00] border-3 border-black rounded-2xl flex items-center justify-center shadow-[3px_3px_0px_0px_#1a1a1a] select-none">
-              <span className="font-headline font-black text-2xl text-black">HF</span>
-            </div>
-
             <div>
               <h2 className="font-headline font-black text-5xl md:text-[68px] leading-[0.85] tracking-tighter text-[#1a1a1a] uppercase select-none">
                 HACKATHON
@@ -69,22 +64,33 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             </p>
           </div>
 
-          {/* Cyberpunk circuit wire / terminal diagram representation */}
-          <div className="bg-[#1a1a1a] p-4 border-3 border-[#1a1a1a] shadow-[4px_4px_0px_0px_#ffcc00] font-mono text-[10px] text-zinc-400 select-none overflow-hidden h-40 relative flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-1.5 border-b border-zinc-800 pb-2 mb-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#e63b2e] block"></span>
-                <span className="w-2.5 h-2.5 rounded-full bg-[#ffcc00] block"></span>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 block"></span>
-                <span className="ml-1 text-zinc-500">FEED_STREAM://ACTIVE_PROT</span>
-              </div>
-              <p className="text-[#ffcc00] font-bold">» SYS.INIT: PROTOCOL_GATE_V3_5</p>
-              <p className="opacity-75">» CONSTRUCTING WEIMAR_BUILD_ENGINE_v42.TS...</p>
-              <p className="opacity-50">» ESTABLISHING PERSISTENT CLOUD SECURITY CODES...</p>
+          <div className="bg-[#1a1a1a] p-4 border-3 border-black shadow-[4px_4px_0px_0px_#ffcc00] font-mono text-[11px] text-zinc-300 select-none overflow-hidden min-h-[168px] flex flex-col">
+            <div className="flex items-center gap-1.5 border-b border-zinc-800 pb-2 mb-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#e63b2e] block" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#ffcc00] block" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 block" />
+              <span className="ml-1 text-zinc-500 text-[10px]">hackathonfeed — zsh</span>
             </div>
-            <div className="flex justify-between items-center text-zinc-650 font-extrabold text-[9px]">
-              <span>SECURE CONSOLE</span>
-              <span>v3.5 // AUTHWAY</span>
+            <div className="space-y-2 flex-1">
+              <p>
+                <span className="text-emerald-400">➜</span>{' '}
+                <span className="text-zinc-500">~/hackathons</span>{' '}
+                <span className="text-[#ffcc00] font-bold">hackathonfeed add .</span>
+              </p>
+              <p>
+                <span className="text-emerald-400">➜</span>{' '}
+                <span className="text-zinc-500">~/hackathons</span>{' '}
+                <span className="text-white">hackathonfeed commit -m &quot;&quot;</span>
+              </p>
+              <p>
+                <span className="text-emerald-400">➜</span>{' '}
+                <span className="text-zinc-500">~/hackathons</span>{' '}
+                <span className="text-[#ffcc00] font-bold">hackathonfeed push</span>
+              </p>
+              <p className="text-zinc-600 pt-1">
+                <span className="text-emerald-400">➜</span>{' '}
+                <span className="inline-block w-2 h-3.5 bg-[#ffcc00] animate-pulse align-middle" />
+              </p>
             </div>
           </div>
         </div>

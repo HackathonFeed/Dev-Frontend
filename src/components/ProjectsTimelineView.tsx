@@ -101,16 +101,16 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
     <div className="space-y-8 animate-fadeIn">
       {view !== 'gallery' && (
         <>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-4 border-black pb-4 mb-2">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b-4 border-black pb-4 mb-2 gap-4">
           <div>
             <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
               Hackathon journey tracker
             </span>
-            <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter mt-2">
+            <h2 className="font-headline font-black text-3xl sm:text-4xl md:text-5xl uppercase tracking-tighter mt-2">
               Tracking
             </h2>
           </div>
-          <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-md text-center md:text-right mt-2 md:mt-0 leading-tight">
+          <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-md sm:text-right leading-tight">
             Complete each step in order — registered, project created, building, submitted, then results. Undo if you mark something by mistake.
           </p>
         </div>
@@ -140,8 +140,8 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
                   key={app.id}
                   className="bg-white border-3 border-black shadow-[5px_5px_0px_0px_#1a1a1a] rounded-[6px] overflow-hidden"
                 >
-                  <header className="p-5 md:p-6 border-b-3 border-black bg-[#faf7f2]">
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  <header className="p-4 sm:p-5 md:p-6 border-b-3 border-black bg-[#faf7f2]">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                       <div className="space-y-2 min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono text-[10px] font-black uppercase bg-black text-[#ffcc00] px-2 py-0.5 border border-black">
@@ -156,7 +156,7 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
                             Step {app.completedSteps.length}/{JOURNEY_STEPS.length}
                           </span>
                         </div>
-                        <h3 className="font-headline font-black text-2xl md:text-3xl uppercase tracking-tight text-[#1a1a1a] truncate">
+                        <h3 className="font-headline font-black text-xl sm:text-2xl md:text-3xl uppercase tracking-tight text-[#1a1a1a] break-words">
                           {app.title}
                         </h3>
                         {app.concept && (
@@ -182,7 +182,7 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <button
                           type="button"
                           onClick={() => setComingSoonOpen(true)}
@@ -229,9 +229,9 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
                   </header>
 
                   {isExpanded && (
-                    <div className="p-5 md:p-6 grid grid-cols-1 xl:grid-cols-2 gap-8">
+                    <div className="p-4 sm:p-5 md:p-6 grid grid-cols-1 xl:grid-cols-2 gap-5 sm:gap-8">
                       <section>
-                        <div className="flex items-center justify-between mb-4 gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
                           <h4 className="font-headline font-black text-sm uppercase flex items-center gap-2">
                             <Clock className="w-4 h-4" />
                             Your journey
@@ -383,7 +383,7 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
                               ))}
                             </ul>
                             <form
-                              className="mt-2 flex gap-1"
+                              className="mt-2 flex flex-col sm:flex-row gap-1"
                               onSubmit={(e) => {
                                 e.preventDefault();
                                 const input = e.currentTarget.elements.namedItem(
@@ -416,7 +416,7 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
                         )}
 
                         <form
-                          className="flex gap-2"
+                          className="flex flex-col sm:flex-row gap-2"
                           onSubmit={(e) => {
                             e.preventDefault();
                             const input = e.currentTarget.elements.namedItem(
@@ -454,16 +454,16 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
 
       {view !== 'tracking' && (
       <section id="project-gallery" className="pt-10 border-t-4 border-black space-y-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3">
           <div>
             <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
               Project archive
             </span>
-            <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter mt-2">
+            <h2 className="font-headline font-black text-3xl sm:text-4xl md:text-5xl uppercase tracking-tighter mt-2">
               Project Gallery
             </h2>
           </div>
-          <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-md md:text-right leading-tight">
+          <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-md sm:text-right leading-tight">
             Browse every project you are tracking across hackathons in one card grid.
           </p>
         </div>
@@ -489,7 +489,7 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
                   key={`gallery-${app.id}`}
                   className="bg-white border-3 border-black shadow-[4px_4px_0px_0px_#101010] rounded-[6px] overflow-hidden flex flex-col"
                 >
-                  <div className="p-5 border-b-3 border-black bg-[#faf7f2] space-y-3">
+                  <div className="p-4 sm:p-5 border-b-3 border-black bg-[#faf7f2] space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={`font-mono text-[9px] font-black uppercase px-2 py-0.5 border-2 ${stageBadgeClass(app.stage)}`}
@@ -500,7 +500,7 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
                         {progress}% complete
                       </span>
                     </div>
-                    <h3 className="font-headline font-black text-2xl uppercase tracking-tight text-[#1a1a1a] leading-none">
+                    <h3 className="font-headline font-black text-xl sm:text-2xl uppercase tracking-tight text-[#1a1a1a] leading-none break-words">
                       {app.title}
                     </h3>
                     <p className="font-mono text-[10px] uppercase font-black text-[#0055ff]">
@@ -513,8 +513,8 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
                     )}
                   </div>
 
-                  <div className="p-5 flex-1 flex flex-col gap-4">
-                    <div className="grid grid-cols-2 gap-2 font-mono text-[10px] uppercase font-bold text-zinc-600">
+                  <div className="p-4 sm:p-5 flex-1 flex flex-col gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[10px] uppercase font-bold text-zinc-600">
                       <span className="flex items-center gap-1.5">
                         <Trophy className="w-3.5 h-3.5 text-[#ffcc00]" />
                         {app.prizePool}
