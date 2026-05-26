@@ -56,6 +56,8 @@ import {
   addBookmark,
   removeBookmark,
   listBookmarks,
+  listHackathons,
+  listPlatforms,
   updateProfile,
   getAdminStats,
   triggerScrape,
@@ -92,12 +94,87 @@ type SocialHandles = {
   website: string;
 };
 
+type FeedStats = {
+  total: number;
+  sources: number;
+  open: number;
+  prizePoolUsd: number;
+};
+
 const EMPTY_SOCIAL_HANDLES: SocialHandles = {
   github: '',
   linkedin: '',
   x: '',
   website: '',
 };
+
+const FALLBACK_FEED_STATS: FeedStats = {
+  total: 290,
+  sources: 12,
+  open: 246,
+  prizePoolUsd: 15_754_309,
+};
+
+function readCachedFeedStats(): FeedStats {
+  try {
+    const cached = window.localStorage.getItem('hackathon_feed_landing_stats');
+    if (!cached) return FALLBACK_FEED_STATS;
+    const parsed = JSON.parse(cached) as Partial<FeedStats>;
+    return {
+      total: Number.isFinite(parsed.total) ? Number(parsed.total) : FALLBACK_FEED_STATS.total,
+      sources: Number.isFinite(parsed.sources) ? Number(parsed.sources) : FALLBACK_FEED_STATS.sources,
+      open: Number.isFinite(parsed.open) ? Number(parsed.open) : FALLBACK_FEED_STATS.open,
+      prizePoolUsd: Number.isFinite(parsed.prizePoolUsd)
+        ? Number(parsed.prizePoolUsd)
+        : FALLBACK_FEED_STATS.prizePoolUsd,
+    };
+  } catch {
+    return FALLBACK_FEED_STATS;
+  }
+}
+
+const PRIZE_TO_USD_MULTIPLIER = {
+  usd: 1,
+  usdc: 1,
+  inr: 0.012,
+  cad: 0.73,
+  eur: 1.08,
+  gbp: 1.27,
+  mxn: 0.058,
+} as const;
+
+function parsePrizePoolToUsd(prizePool: string | null | undefined): number {
+  if (!prizePool) return 0;
+  const normalized = prizePool.trim();
+  if (!normalized || /^(free entry|paid|not specified|tbd|prizes tba)$/i.test(normalized)) return 0;
+
+  const amountMatch = normalized.match(
+    /(?:\$CAD|CAD|MEX\$|USD|USDC|INR|[$₹€£])?\s*([0-9][0-9,]*(?:\.\d+)?)\s*([kKmM])?/,
+  );
+  if (!amountMatch) return 0;
+
+  const [, rawAmount, suffix] = amountMatch;
+  let amount = Number(rawAmount.replace(/,/g, ''));
+  if (!Number.isFinite(amount)) return 0;
+  if (suffix?.toLowerCase() === 'k') amount *= 1_000;
+  if (suffix?.toLowerCase() === 'm') amount *= 1_000_000;
+
+  const currency = /₹|\bINR\b/i.test(normalized)
+    ? 'inr'
+    : /\$CAD|\bCAD\b/i.test(normalized)
+      ? 'cad'
+      : /€|\bEUR\b/i.test(normalized)
+        ? 'eur'
+        : /£|\bGBP\b/i.test(normalized)
+          ? 'gbp'
+          : /MEX\$/i.test(normalized)
+            ? 'mxn'
+            : /\bUSDC\b/i.test(normalized)
+              ? 'usdc'
+              : 'usd';
+
+  return amount * PRIZE_TO_USD_MULTIPLIER[currency];
+}
 
 function isPastDate(value: string | undefined): boolean {
   if (!value || value === 'TBD') return false;
@@ -170,6 +247,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => activeTabFromPath(window.location.pathname));
 
   const [authMode, setAuthMode] = useState<AuthMode>(() => authModeFromPath(window.location.pathname));
+  const [authTransitionMode, setAuthTransitionMode] = useState<AuthMode | null>(null);
   const [pendingTab, setPendingTab] = useState<'tracker' | 'explore' | 'validator' | null>(null);
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>(() => dashboardTabFromPath(window.location.pathname));
 
@@ -191,6 +269,7 @@ export default function App() {
   const [registerLoading, setRegisterLoading] = useState<string | null>(null);
   const [selectedHackathonId, setSelectedHackathonId] = useState<string | null>(null);
   const [adminStats, setAdminStats] = useState<{ total_hackathons: number; total_searches: number } | null>(null);
+  const [feedStats, setFeedStats] = useState<FeedStats>(readCachedFeedStats);
   const [adminLoading, setAdminLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [publicProfileUsername, setPublicProfileUsername] = useState<string | null>(
@@ -314,6 +393,51 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [allHackathons, openHackathons, platforms] = await Promise.all([
+          listHackathons({ page: 1, page_size: 100, only_open: false }),
+          listHackathons({ page: 1, page_size: 1, only_open: true }),
+          listPlatforms(),
+        ]);
+        const baseStats = {
+          total: allHackathons.total,
+          open: openHackathons.total,
+          sources: platforms.length,
+        };
+
+        if (!cancelled) {
+          setFeedStats((previous) => ({
+            ...previous,
+            ...baseStats,
+          }));
+        }
+
+        const remainingPages = await Promise.all(
+          Array.from({ length: Math.max(allHackathons.pages - 1, 0) }, (_, index) =>
+            listHackathons({ page: index + 2, page_size: 100, only_open: false }),
+          ),
+        );
+        const prizePoolUsd = [allHackathons, ...remainingPages]
+          .flatMap((page) => page.items)
+          .reduce((sum, hackathon) => sum + parsePrizePoolToUsd(hackathon.prize_pool), 0);
+
+        if (!cancelled) {
+          const nextStats = { ...baseStats, prizePoolUsd };
+          setFeedStats(nextStats);
+          window.localStorage.setItem('hackathon_feed_landing_stats', JSON.stringify(nextStats));
+        }
+      } catch {
+        // Keep cached/fallback stats visible if the landing API is temporarily unavailable.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user) {
       setSocialHandles(EMPTY_SOCIAL_HANDLES);
       return;
@@ -387,7 +511,16 @@ export default function App() {
     setAuthMode(mode);
     setAuthError(null);
     setApiError(null);
-    navigateTo(mode === 'login' ? '/login' : '/signup');
+    if (activeTab === 'auth') {
+      navigateTo(mode === 'login' ? '/login' : '/signup');
+      return;
+    }
+
+    setAuthTransitionMode(mode);
+    window.setTimeout(() => {
+      navigateTo(mode === 'login' ? '/login' : '/signup');
+      window.setTimeout(() => setAuthTransitionMode(null), 420);
+    }, 260);
   };
 
   const handleAuthenticate = async (e: React.FormEvent) => {
@@ -667,6 +800,26 @@ export default function App() {
     }
   }, [pastValidations]);
 
+  // --- Scroll-reveal: imperative DOM approach (bypasses React reconciliation) ---
+  useEffect(() => {
+    if (activeTab !== 'landing') return;
+    const IDS = ['ls-hero', 'ls-platforms', 'ls-modules', 'ls-hiw', 'ls-onefeed', 'ls-cta'];
+    const checkSections = () => {
+      const vh = window.innerHeight;
+      IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el || el.classList.contains('section-in-view')) return;
+        if (el.getBoundingClientRect().top < vh * 0.88) {
+          el.classList.add('section-in-view');
+        }
+      });
+    };
+    // Delay slightly to let React finish first paint
+    const t = setTimeout(checkSections, 80);
+    window.addEventListener('scroll', checkSections, { passive: true });
+    return () => { clearTimeout(t); window.removeEventListener('scroll', checkSections); };
+  }, [activeTab]);
+
   // --- Create/Join Hackathon (local preview only — backend is scrape-sourced) ---
   const handleCreateHackathon = (e: React.FormEvent) => {
     e.preventDefault();
@@ -729,6 +882,19 @@ export default function App() {
 
   // Theme chips from backend API (use original theme string for API filter)
   const filteredHackathons = hackathons;
+  const formatFeedStat = (value: number | undefined) => (
+    value == null ? '...' : value.toLocaleString()
+  );
+  const formatPrizeStat = (value: number | undefined) => (
+    value == null
+      ? '...'
+      : new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          notation: 'compact',
+          maximumFractionDigits: 1,
+        }).format(value)
+  );
 
   const renderPagination = () => (
     hackathonPages > 1 ? (
@@ -1562,27 +1728,19 @@ export default function App() {
         TopNavBar: Striking Neo-Brutalist Nav bar
         ========================================================
       */}
-      <nav id="navbar-brutalist" className="bg-[#eee9e0] w-full sticky top-0 z-50 border-b-3 border-primary">
-        <div className="flex justify-between items-center w-full px-4 md:px-6 py-2 max-w-[1440px] mx-auto gap-4">
+      <nav id="navbar-brutalist" className="bg-[#eee9e0] w-full sticky top-0 z-50 border-b-4 border-black">
+        <div className="flex justify-between items-center w-full px-6 md:px-10 py-4 max-w-[1440px] mx-auto gap-4">
           <button
             onClick={() => { navigateTo('/'); clearHackathonFilters(); }}
-            className="flex items-center gap-2 font-headline font-black text-sm uppercase tracking-tight text-[#1a1a1a] cursor-pointer bg-transparent border-none"
+            className="flex items-center gap-3 font-headline font-black text-xl uppercase tracking-tight text-[#1a1a1a] cursor-pointer bg-transparent border-none"
           >
-            <span className="w-5 h-5 bg-[#ffcc00] border-2 border-black grid place-items-center text-[10px] leading-none">H</span>
             HackathonFeed
           </button>
-
-          <div className="hidden md:flex items-center gap-8 font-mono text-[9px] uppercase font-black">
-            <button onClick={() => openAuth('login')} className="border-b-2 border-black bg-transparent cursor-pointer">Discover</button>
-            <button onClick={handleTrackerAccess} className="bg-transparent cursor-pointer">Track</button>
-            <button onClick={() => openAuth('login')} className="bg-transparent cursor-pointer">Validate</button>
-            <button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} className="bg-transparent cursor-pointer">About</button>
-          </div>
 
           <button
             type="button"
             onClick={() => openAuth('register')}
-            className="bg-[#ffcc00] border-2 border-black px-4 py-1.5 font-headline font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer"
+            className="bg-[#ffcc00] border-2 border-black px-6 py-2.5 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer"
           >
             Start Building
           </button>
@@ -1607,6 +1765,19 @@ export default function App() {
         </div>
       )}
 
+      {authTransitionMode && (
+        <div className="auth-route-curtain fixed inset-0 z-[100] bg-[#ffcc00] border-y-4 border-black flex items-center justify-center pointer-events-none">
+          <div className="bg-[#1a1a1a] text-[#ffcc00] border-4 border-black px-8 py-6 shadow-[8px_8px_0px_0px_#e63b2e] text-center">
+            <p className="font-mono text-[10px] uppercase font-black tracking-[0.28em] text-white/70 mb-2">
+              Routing to secure gateway
+            </p>
+            <p className="font-headline font-black text-4xl md:text-6xl uppercase tracking-tighter">
+              {authTransitionMode === 'login' ? 'Login' : 'Sign Up'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* MASTER CONTENT GRID AREA */}
       <main className="flex-grow">
 
@@ -1617,21 +1788,21 @@ export default function App() {
         */}
         {activeTab === 'landing' && (
           <div className="animate-fadeIn bg-[#eee9e0] bg-grid">
-            <section className="relative overflow-hidden border-b-4 border-black min-h-[560px] flex items-center">
+            <section id="ls-hero" className="relative overflow-hidden border-b-4 border-black min-h-[560px] flex items-center">
               <div className="max-w-[1440px] mx-auto px-6 py-16 md:py-24 w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
                 <div className="lg:col-span-6 relative z-10">
-                  <span className="inline-block bg-black text-white font-mono text-[10px] uppercase font-black px-3 py-1 mb-6">
+                  <span className="reveal inline-block bg-black text-white font-mono text-[10px] uppercase font-black px-3 py-1 mb-6">
                     The developers command center
                   </span>
                   <h1 className="font-headline font-black uppercase tracking-tighter leading-[0.86] text-6xl md:text-7xl lg:text-[88px] text-[#1a1a1a]">
-                    Aggregate.<br />
-                    Track.<br />
-                    <span className="text-[#e63b2e]">Validate.</span>
+                    <span className="reveal reveal-d1 block">Aggregate.</span>
+                    <span className="reveal reveal-d2 block">Track.</span>
+                    <span className="reveal reveal-d3 block text-[#e63b2e]">Validate.</span>
                   </h1>
-                  <p className="mt-6 max-w-sm border-l-4 border-[#ffcc00] pl-4 font-body text-sm md:text-base font-bold leading-snug text-[#1a1a1a]">
-                    The ultimate Bauhaus-inspired platform to discover global hackathons, manage your applications, and validate ideas with AI.
+                  <p className="reveal reveal-d4 mt-6 max-w-sm border-l-4 border-[#ffcc00] pl-4 font-body text-sm md:text-base font-bold leading-snug text-[#1a1a1a]">
+                  FIND HACKATHONS FROM YOUR CITY TO THE GLOBAL STAGE
                   </p>
-                  <div className="mt-8 flex flex-wrap gap-4">
+                  <div className="reveal reveal-d5 mt-8 flex flex-wrap gap-4">
                     <button
                       type="button"
                       onClick={() => openAuth('register')}
@@ -1649,14 +1820,45 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="lg:col-span-6 hidden md:flex justify-center lg:justify-end relative min-h-[330px]">
-                  <div className="absolute right-4 top-8 w-28 h-28 bg-[#e63b2e] rounded-full border-3 border-black" />
-                  <div className="absolute left-4 bottom-16 w-20 h-20 bg-[#ffcc00] border-3 border-black" />
-                  <div className="relative mt-10 w-[430px] h-[230px] bg-[#8a8a82] border-4 border-black shadow-[8px_8px_0px_0px_#101010] rotate-2 grid place-items-center">
-                    <div className="absolute inset-8 border-2 border-black bg-grid opacity-80" />
-                    <div className="relative w-28 h-28 bg-white/80 rounded-full border border-white grid place-items-center">
-                      <div className="bg-black text-white px-5 py-4 font-headline font-black text-sm uppercase leading-tight text-center">
-                        Building<br />Future<br />Of Code
+                <div className="reveal-right lg:col-span-6 hidden md:flex justify-center lg:justify-end relative min-h-[430px]">
+                  <div className="absolute right-2 top-4 w-28 h-28 bg-[#e63b2e] rounded-full border-3 border-black z-0" />
+                  <div className="absolute left-0 bottom-20 w-20 h-20 bg-[#ffcc00] border-3 border-black z-0" />
+                  <div className="relative mt-8 w-[580px] max-w-full bg-white border-4 border-black shadow-[16px_16px_0px_0px_#101010] rotate-[1.5deg] p-8 z-10">
+                    <div className="absolute inset-0 bg-grid opacity-40 pointer-events-none" />
+                    <div className="relative z-10 space-y-5">
+                      <div className="grid grid-cols-3 gap-6 items-end border-b-2 border-black pb-5">
+                        <div>
+                          <p className="font-mono text-[9px] uppercase font-bold text-zinc-500 mb-1">Hackathons Indexed</p>
+                          <p className="font-headline font-black text-4xl tracking-tighter text-[#1a1a1a]">
+                            {formatFeedStat(feedStats?.total)}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="font-mono text-[9px] uppercase font-bold text-zinc-500 mb-1">Est. Prize Pool</p>
+                          <p className="font-headline font-black text-4xl tracking-tighter text-[#e63b2e]">
+                            {formatPrizeStat(feedStats?.prizePoolUsd)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-mono text-[9px] uppercase font-bold text-zinc-500 mb-1">Open Now</p>
+                          <p className="font-headline font-black text-4xl tracking-tighter text-[#0055ff]">
+                            {formatFeedStat(feedStats?.open)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="bg-[#eee9e0] border-2 border-black px-5 py-4 flex justify-between items-center">
+                        <div>
+                          <p className="font-headline font-black text-xs uppercase tracking-tight">AGI Frontiers</p>
+                          <p className="font-mono text-[9px] uppercase text-zinc-500 font-bold">DUE: Jun 15, 2026</p>
+                        </div>
+                        <span className="bg-[#1a1a1a] text-[#ffcc00] font-mono text-[9px] font-bold px-2.5 py-1 uppercase">LIVE</span>
+                      </div>
+                      <div className="bg-[#ffcc00] border-2 border-black px-5 py-4 flex justify-between items-center">
+                        <div>
+                          <p className="font-headline font-black text-xs uppercase tracking-tight">DeFi Summer Hack</p>
+                          <p className="font-mono text-[9px] uppercase text-[#1a1a1a]/60 font-bold">DUE: Jul 2, 2026</p>
+                        </div>
+                        <span className="bg-[#0055ff] text-white font-mono text-[9px] font-bold px-2.5 py-1 uppercase">3 DAYS</span>
                       </div>
                     </div>
                   </div>
@@ -1664,26 +1866,85 @@ export default function App() {
               </div>
             </section>
 
-            <section className="bg-[#171717] text-[#ffcc00] border-b-4 border-black">
-              <div className="max-w-[1440px] mx-auto px-6 py-9 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-                <div>
-                  <p className="font-headline font-black text-5xl md:text-6xl tracking-tighter">5000+</p>
-                  <p className="font-mono text-[10px] uppercase font-black text-white mt-1">Hackathons listed</p>
+            {/* PLATFORM MARQUEE */}
+            {(() => {
+              const PLATFORMS = [
+                { key: 'devpost',       name: 'Devpost',                domain: 'devpost.com' },
+                { key: 'unstop',        name: 'Unstop',                 domain: 'unstop.com' },
+                { key: 'hack2skill',    name: 'Hack2Skill',             domain: 'hack2skill.com' },
+                { key: 'dorahacks',     name: 'DoraHacks',              domain: 'dorahacks.io' },
+                { key: 'devfolio',      name: 'Devfolio',               domain: 'devfolio.co' },
+                { key: 'lablab',        name: 'lablab.ai',              domain: 'lablab.ai' },
+                { key: 'allhackathons', name: 'All Hackathons',         domain: 'allhackathons.com' },
+                { key: 'hackquest',     name: 'HackQuest',              domain: 'hackquest.io' },
+                { key: 'whereuelevate', name: 'WhereUElevate',          domain: 'whereuelevate.com' },
+                { key: 'hackculture',   name: 'HackCulture',            domain: 'hackculture.io' },
+                { key: 'hackerearth',   name: 'HackerEarth',            domain: 'hackerearth.com' },
+                { key: 'mlh',           name: 'MLH',                    domain: 'mlh.io' },
+              ];
+              const PlatformItem = ({ p }: { p: typeof PLATFORMS[0] }) => (
+                <div className="flex items-center gap-4 px-8 border-r border-white/10 shrink-0 group cursor-default">
+                  <div className="w-12 h-12 bg-white/10 border-2 border-white/20 rounded-xl flex items-center justify-center overflow-hidden group-hover:border-[#ffcc00] group-hover:bg-[#ffcc00]/10 transition-all">
+                    <img
+                      src={`https://www.google.com/s2/favicons?domain=${p.domain}&sz=64`}
+                      alt={p.name}
+                      width={32}
+                      height={32}
+                      className="w-8 h-8 object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  </div>
+                  <span className="font-headline font-black text-white/80 text-base tracking-tight group-hover:text-white transition-colors whitespace-nowrap">
+                    {p.name}
+                  </span>
                 </div>
+              );
+              return (
+            <section id="ls-platforms" className="bg-[#171717] border-b-4 border-black py-14 overflow-hidden">
+              <div className="max-w-[1440px] mx-auto px-6 mb-10 flex flex-col md:flex-row items-center justify-between gap-4">
                 <div>
-                  <p className="font-headline font-black text-5xl md:text-6xl tracking-tighter">20k+</p>
-                  <p className="font-mono text-[10px] uppercase font-black text-white mt-1">Active developers</p>
+                  <span className="reveal font-mono text-[10px] uppercase font-bold text-white/40 tracking-widest block mb-2">Live Sources</span>
+                  <h3 className="font-headline font-black text-2xl md:text-3xl uppercase text-white tracking-tighter">
+                    Aggregated from{' '}
+                    <span className="text-[#ffcc00]">
+                      {feedStats ? `${feedStats.sources} platforms` : '12+ platforms'}
+                    </span>
+                  </h3>
                 </div>
-                <div>
-                  <p className="font-headline font-black text-5xl md:text-6xl tracking-tighter">$2M+</p>
-                  <p className="font-mono text-[10px] uppercase font-black text-white mt-1">Prize pools tracked</p>
+                <div className="flex gap-3 flex-wrap justify-center">
+                  {(
+                    [
+                      { n: feedStats?.total, l: 'Total Hackathons' },
+                      { n: feedStats?.sources, l: 'Sources' },
+                      { n: feedStats?.open, l: 'Open Now' },
+                    ] as const
+                  ).map((s) => (
+                    <div key={s.l} className="border-2 border-white/20 px-4 py-2 text-center">
+                      <div className="font-headline font-black text-xl text-[#ffcc00]">
+                        {s.n != null ? s.n.toLocaleString() : '—'}
+                      </div>
+                      <div className="font-mono text-[9px] uppercase font-bold text-white/50">{s.l}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="marquee-track overflow-hidden relative">
+                {/* fade edges */}
+                <div className="absolute left-0 top-0 h-full w-32 bg-gradient-to-r from-[#171717] to-transparent z-10 pointer-events-none" />
+                <div className="absolute right-0 top-0 h-full w-32 bg-gradient-to-l from-[#171717] to-transparent z-10 pointer-events-none" />
+                <div className="animate-marquee flex items-center py-3 whitespace-nowrap">
+                  {[...PLATFORMS, ...PLATFORMS].map((p, i) => (
+                    <PlatformItem key={`${p.key}-${i}`} p={p} />
+                  ))}
                 </div>
               </div>
             </section>
+              );
+            })()}
 
-            <section className="py-16 md:py-20 border-b-4 border-black">
+            <section id="ls-modules" className="py-16 md:py-20 border-b-4 border-black">
               <div className="max-w-[1440px] mx-auto px-6">
-                <h2 className="font-headline font-black uppercase text-4xl md:text-5xl tracking-tighter mb-12">
+                <h2 className="reveal font-headline font-black uppercase text-4xl md:text-5xl tracking-tighter mb-12">
                   Core <span className="bg-black text-white px-2">Modules</span>
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1696,6 +1957,7 @@ export default function App() {
                       onClick: () => openAuth('login'),
                       color: 'bg-white',
                       iconColor: 'bg-black text-[#ffcc00]',
+                      delay: 'reveal-d1',
                     },
                     {
                       icon: <Calendar className="w-6 h-6" />,
@@ -1705,6 +1967,7 @@ export default function App() {
                       onClick: handleTrackerAccess,
                       color: 'bg-[#ffcc00]',
                       iconColor: 'bg-black text-[#ffcc00]',
+                      delay: 'reveal-d2',
                     },
                     {
                       icon: <HelpCircle className="w-6 h-6" />,
@@ -1714,12 +1977,13 @@ export default function App() {
                       onClick: () => openAuth('login'),
                       color: 'bg-white',
                       iconColor: 'bg-[#e63b2e] text-white',
+                      delay: 'reveal-d3',
                     },
                   ].map((module) => (
                     <article
                       key={module.title}
                       onClick={module.onClick}
-                      className={`${module.color} border-4 border-black p-6 min-h-[260px] flex flex-col justify-between shadow-[4px_4px_0px_0px_#101010] hover:-translate-y-1 transition-transform cursor-pointer`}
+                      className={`reveal ${module.delay} ${module.color} border-4 border-black p-6 min-h-[260px] flex flex-col justify-between shadow-[4px_4px_0px_0px_#101010] hover:-translate-y-1 transition-transform cursor-pointer`}
                     >
                       <div>
                         <div className={`${module.iconColor} w-12 h-12 border-2 border-black grid place-items-center mb-7`}>
@@ -1738,66 +2002,90 @@ export default function App() {
               </div>
             </section>
 
-            <section className="py-14 md:py-20 border-b-4 border-black">
+            {/* HOW IT WORKS */}
+            <section id="ls-hiw" className="py-16 md:py-20 border-b-4 border-black bg-[#f5f0e8]">
               <div className="max-w-[1440px] mx-auto px-6">
-                <div className="relative overflow-hidden bg-[#171717] text-white border-4 border-black p-8 md:p-14 min-h-[260px]">
-                  <div className="relative z-10 max-w-xl">
-                    <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter leading-none">
-                      Join the <span className="text-[#ffcc00]">Builder</span><br />Revolution.
-                    </h2>
-                    <p className="font-body text-sm font-bold mt-5 mb-8 text-white/80">
-                      Form follows function. Your hackathon journey simplified. Registration is open for the 2024 season.
-                    </p>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        openAuth('register');
-                      }}
-                      className="flex flex-col sm:flex-row gap-3 max-w-lg"
-                    >
-                      <input
-                        type="email"
-                        placeholder="YOUR@EMAIL.COM"
-                        onChange={(e) => setInputEmail(e.target.value)}
-                        className="bg-white text-black border-2 border-black px-4 py-3 font-mono text-xs font-black uppercase focus:outline-none flex-1"
-                      />
-                      <button
-                        type="submit"
-                        className="bg-[#ffcc00] text-black border-2 border-black px-5 py-3 font-headline font-black text-[10px] uppercase hover:bg-white transition-colors cursor-pointer"
-                      >
-                        Register Now
-                      </button>
-                    </form>
-                  </div>
-                  <div className="absolute right-0 top-0 h-full w-1/3 bg-[#ffcc00]/10 skew-x-[-16deg] translate-x-16" />
-                  <div className="absolute right-10 bottom-0 h-40 w-40 bg-[#e63b2e]/30" />
+                <h2 className="reveal font-headline font-black uppercase text-4xl md:text-5xl tracking-tighter text-center mb-12">
+                  HOW IT WORKS
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {[
+                    { num: '01', title: 'DISCOVER', body: 'Explore our vast database matching your skill set. Find the perfect forge for your stack.', bg: 'bg-[#ffcc00]', text: 'text-[#1a1a1a]', delay: 'reveal-d1' },
+                    { num: '02', title: 'VALIDATE', body: 'Run your ideas through our neural engine. Check feasibility and get upgrade suggestions.', bg: 'bg-[#eee9e0]', text: 'text-[#1a1a1a]', delay: 'reveal-d2' },
+                    { num: '03', title: 'TRACK', body: 'Manage applications, teams, and milestones on Kanban boards. Move seamlessly to release.', bg: 'bg-[#e63b2e]', text: 'text-white', delay: 'reveal-d3' },
+                    { num: '04', title: 'BUILD', body: 'Focus on execution and winning hackathons targeting your stack. Form follows function.', bg: 'bg-white', text: 'text-[#1a1a1a]', delay: 'reveal-d4' },
+                  ].map((step) => (
+                    <div key={step.num} className={`reveal ${step.delay} ${step.bg} border-4 border-black p-7 flex flex-col gap-8 shadow-[5px_5px_0px_0px_#1a1a1a]`}>
+                      <span className={`font-headline font-black text-3xl ${step.text}`}>{step.num}</span>
+                      <div>
+                        <h4 className={`font-headline font-black text-lg uppercase mb-2 ${step.text}`}>{step.title}</h4>
+                        <p className={`font-mono text-[11px] font-bold uppercase leading-relaxed ${step.text === 'text-white' ? 'text-white/90' : 'text-[#1a1a1a]/80'}`}>{step.body}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </section>
 
-            <footer className="bg-[#171717] text-white border-t-4 border-[#ffcc00] min-h-[260px] relative overflow-hidden">
-              <div className="max-w-[1440px] mx-auto px-6 py-12 flex flex-col md:flex-row justify-between gap-8 relative z-10">
-                <div>
-                  <h3 className="font-headline font-black uppercase text-[#ffcc00] text-xl mb-3">HackathonFeed</h3>
-                  <p className="font-mono text-[9px] uppercase text-white/60 font-bold">
-                    © 2026 HackathonFeed. Form<br />follows function.
-                  </p>
+            {/* FORM FOLLOWS FUNCTION */}
+            <section id="ls-onefeed" className="py-16 md:py-20 border-b-4 border-black bg-[#f5f0e8]">
+              <div className="max-w-[1440px] mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                <div className="space-y-6">
+                  <h2 className="reveal-left font-headline font-black text-5xl md:text-7xl uppercase tracking-tighter text-[#1a1a1a] leading-[0.88]">
+                    ONE<br />FEED.<br />ALL HACKS.
+                  </h2>
+                  <div className="reveal-left reveal-d2 border-4 border-black p-6 bg-white shadow-[4px_4px_0px_0px_#1a1a1a] max-w-md">
+                    <p className="font-body text-sm font-bold text-[#1a1a1a]/80 uppercase leading-relaxed">
+                      Stop hunting across 12 tabs. HackathonFeed pulls every hackathon — local meetups to $500k global stages — into a single live feed. Filter, track, and apply without leaving the dashboard.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex gap-8 font-mono text-[9px] uppercase font-black text-white">
-                  <button onClick={() => openAuth('login')} className="bg-transparent cursor-pointer">Terms</button>
-                  <button onClick={() => openAuth('login')} className="bg-transparent cursor-pointer">Privacy</button>
-                  <button onClick={() => openAuth('login')} className="bg-transparent cursor-pointer">Twitter</button>
-                  <button onClick={() => openAuth('login')} className="bg-transparent cursor-pointer">Github</button>
-                </div>
-                <div className="flex gap-2">
-                  <span className="w-8 h-8 bg-white text-black border-2 border-white grid place-items-center font-headline font-black">□</span>
-                  <span className="w-8 h-8 bg-white text-black border-2 border-white grid place-items-center font-headline font-black">*</span>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="reveal-scale reveal-d1 bg-[#ffcc00] border-4 border-black p-8 flex flex-col justify-center items-center h-48 text-center shadow-[6px_6px_0px_0px_#1a1a1a]">
+                    <span className="font-headline font-black text-5xl tracking-tighter text-[#1a1a1a]">
+                      {formatFeedStat(feedStats?.total)}
+                    </span>
+                    <span className="font-headline font-black text-[11px] uppercase text-[#1a1a1a] mt-1">Hackathons Indexed</span>
+                  </div>
+                  <div className="reveal-scale reveal-d2 bg-white border-4 border-black p-8 flex flex-col justify-center items-center h-48 text-center shadow-[6px_6px_0px_0px_#0055ff]">
+                    <span className="font-headline font-black text-5xl tracking-tighter text-[#1a1a1a]">
+                      {formatFeedStat(feedStats?.open)}
+                    </span>
+                    <span className="font-headline font-black text-[11px] uppercase text-[#1a1a1a] mt-1">Open Now</span>
+                  </div>
+                  <div className="reveal-scale reveal-d3 bg-[#1a1a1a] border-4 border-black p-8 flex flex-col justify-center items-center h-48 text-center shadow-[6px_6px_0px_0px_#e63b2e]">
+                    <span className="font-headline font-black text-5xl tracking-tighter text-[#ffcc00]">
+                      {formatFeedStat(feedStats?.sources)}
+                    </span>
+                    <span className="font-headline font-black text-[11px] uppercase text-white mt-1">Sources</span>
+                  </div>
+                  <div className="reveal-scale reveal-d4 bg-[#eee9e0] border-4 border-black p-8 flex flex-col justify-center items-center h-48 text-center shadow-[6px_6px_0px_0px_#1a1a1a]">
+                    <span className="font-headline font-black text-5xl tracking-tighter text-[#1a1a1a]">
+                      {formatFeedStat(
+                        feedStats ? Math.max(feedStats.total - feedStats.open, 0) : undefined,
+                      )}
+                    </span>
+                    <span className="font-headline font-black text-[11px] uppercase text-[#1a1a1a] mt-1">Closed / Upcoming</span>
+                  </div>
                 </div>
               </div>
-              <div className="absolute bottom-0 left-0 w-full font-headline font-black text-[120px] md:text-[180px] uppercase tracking-[0.4em] text-white/[0.03] leading-none pl-6">
-                Bauhaus
+            </section>
+
+            <section id="ls-cta" className="bg-[#e63b2e] py-20 md:py-28 text-center border-b-4 border-black">
+              <div className="max-w-[1440px] mx-auto px-6 flex flex-col items-center gap-10">
+                <h2 className="reveal font-headline font-black text-6xl md:text-8xl lg:text-[100px] uppercase text-white tracking-tighter leading-[0.9] select-none">
+                  READY<br />TO FORGE?
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => openAuth('register')}
+                  className="reveal reveal-d2 bg-[#1a1a1a] text-white border-4 border-white px-14 py-5 font-headline font-black text-lg uppercase shadow-[6px_6px_0px_0px_#ffcc00] hover:bg-white hover:text-black hover:shadow-none transition-all active:translate-x-1 active:translate-y-1 cursor-pointer"
+                >
+                  JOIN NOW ↗
+                </button>
               </div>
-            </footer>
+            </section>
+
           </div>
         )}
 
@@ -3004,7 +3292,7 @@ export default function App() {
                 <div className="flex items-center gap-6 mb-8 font-headline">
                   <button 
                     type="button"
-                    onClick={() => { navigateTo('/login'); setAuthError(null); }}
+                    onClick={() => openAuth('login')}
                     className={`text-sm tracking-wider uppercase font-black transition-colors pb-1 cursor-pointer ${
                       authMode === 'login' 
                         ? 'text-primary border-b-4 border-primary' 
@@ -3016,7 +3304,7 @@ export default function App() {
                   <span className="text-primary/30 text-xl font-thin select-none">|</span>
                   <button 
                     type="button"
-                    onClick={() => { navigateTo('/signup'); setAuthError(null); }}
+                    onClick={() => openAuth('register')}
                     className={`text-sm tracking-wider uppercase font-black transition-colors pb-1 cursor-pointer ${
                       authMode === 'register' 
                         ? 'text-primary border-b-4 border-[#ffcc00]' 
@@ -3027,7 +3315,7 @@ export default function App() {
                   </button>
                 </div>
 
-                <form onSubmit={handleAuthenticate} className="space-y-6">
+                <form key={authMode} onSubmit={handleAuthenticate} className="space-y-6 auth-form-transition">
 
                   {authError && (
                     <div className="bg-[#e63b2e]/10 border-2 border-[#e63b2e] p-3 font-mono text-[10px] font-bold text-[#e63b2e] uppercase">
@@ -3121,23 +3409,21 @@ export default function App() {
         ========================================================
       */}
       <footer id="footer-brutalist" className="bg-[#1a1a1a] text-white border-t-4 border-primary">
-        <div className="flex flex-col md:flex-row justify-between items-center w-full px-8 py-10 gap-6 max-w-[1440px] mx-auto">
+        <div className="flex flex-col md:flex-row justify-between items-center w-full px-8 py-6 gap-4 max-w-[1440px] mx-auto">
           <div className="font-headline text-xl font-black text-background">
             HACKATHONFEED
           </div>
-          
-          <div className="flex flex-wrap justify-center gap-8 font-body text-xs font-bold uppercase">
-            <span className="text-background/80 hover:text-[#ffcc00] transition-colors cursor-pointer">Privacy policy</span>
-            <span className="text-background/80 hover:text-[#ffcc00] transition-colors cursor-pointer">Terms of use</span>
-            <span className="text-background/80 hover:text-[#ffcc00] transition-colors cursor-pointer flex items-center gap-1">
-              Github repository
-              <ExternalLink className="w-3.5 h-3.5" />
-            </span>
-            <span className="text-background/80 hover:text-[#ffcc00] transition-colors cursor-pointer">Discord server</span>
-          </div>
-
-          <div className="text-background/40 font-body text-[10px] font-bold uppercase text-center md:text-right">
-            © 2026 HACKATHONFEED. ALL RIGHTS RESERVED. FORM FOLLOWS PLURALITY.
+          <a
+            href="https://linkedin.com/company/hackathonfeed"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-background/70 hover:text-[#ffcc00] transition-colors"
+          >
+            <Linkedin className="w-4 h-4" />
+            <span className="font-mono text-[10px] uppercase font-bold">LinkedIn</span>
+          </a>
+          <div className="text-background/40 font-mono text-[9px] font-bold uppercase">
+            © 2026 HACKATHONFEED. ALL RIGHTS RESERVED.
           </div>
         </div>
       </footer>
