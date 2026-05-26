@@ -23,9 +23,12 @@ import {
   HelpCircle,
   Clock,
   ExternalLink,
+  Github,
   Globe,
+  Linkedin,
   Trophy,
   Settings,
+  Twitter,
   LogOut,
   Bookmark,
   Loader2
@@ -38,6 +41,7 @@ import { VALIDATION_TAGLINES } from './data';
 import { CircuitBoardIllustration } from './components/CircuitBoardIllustration';
 import { PublicProfileView } from './components/PublicProfileView';
 import { ProjectsTimelineView } from './components/ProjectsTimelineView';
+import { AiComingSoonModal } from './components/AiComingSoonModal';
 import { HackathonDetailModal } from './components/HackathonDetailModal';
 import { HackathonStatusBadge } from './components/HackathonStatusBadge';
 import {
@@ -60,28 +64,114 @@ import {
 } from './api';
 import { mapHackathonsFromApi } from './lib/mapHackathon';
 import { isHackathonRegistered } from './lib/trackedProjects';
-import { ThemeToggle } from './components/ThemeToggle';
 import { DashboardLeaderboard } from './components/DashboardLeaderboard';
 import { SavedHackathonsPanel } from './components/SavedHackathonsPanel';
 import { ProfileAvatar } from './components/ProfileAvatar';
 import { ProfilePhotoSettings } from './components/ProfilePhotoSettings';
-import { useTheme } from './context/ThemeContext';
 
 function parsePublicProfileUsername(): string | null {
   const match = window.location.pathname.match(/^\/u\/([a-zA-Z0-9_-]{3,30})\/?$/);
   return match?.[1]?.toLowerCase() ?? null;
 }
 
+type RegisterHackathonPayload = {
+  title: string;
+  id?: string;
+  prizePool?: string;
+  deadline?: string;
+  url?: string;
+  statusLabel?: string;
+  endDate?: string;
+  apiStatus?: Hackathon['apiStatus'];
+};
+
+type SocialHandles = {
+  github: string;
+  linkedin: string;
+  x: string;
+  website: string;
+};
+
+const EMPTY_SOCIAL_HANDLES: SocialHandles = {
+  github: '',
+  linkedin: '',
+  x: '',
+  website: '',
+};
+
+function isPastDate(value: string | undefined): boolean {
+  if (!value || value === 'TBD') return false;
+  const parsed = new Date(`${value.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return parsed < today;
+}
+
+function isEndedHackathon(hack: Partial<RegisterHackathonPayload> | undefined): boolean {
+  if (!hack) return false;
+  return (
+    hack.apiStatus === 'ended' ||
+    hack.statusLabel?.toLowerCase() === 'ended' ||
+    isPastDate(hack.endDate)
+  );
+}
+
+type ActiveTab = 'landing' | 'explore' | 'tracker' | 'validator' | 'auth';
+type AuthMode = 'login' | 'register';
+type DashboardTab = 'dashboard' | 'hackathons' | 'projects' | 'gallery' | 'team' | 'settings' | 'profile';
+
+const PROTECTED_PATHS = new Set([
+  '/explore',
+  '/tracker',
+  '/ai-validate',
+  '/validator',
+  '/dashboard',
+  '/hackathons',
+  '/tracking',
+  '/project-gallery',
+  '/settings',
+  '/profile',
+]);
+
+function activeTabFromPath(pathname: string): ActiveTab {
+  if (pathname === '/login' || pathname === '/signup' || PROTECTED_PATHS.has(pathname)) return 'auth';
+  return 'landing';
+}
+
+function authModeFromPath(pathname: string): AuthMode {
+  return pathname === '/signup' ? 'register' : 'login';
+}
+
+function dashboardTabFromPath(pathname: string): DashboardTab {
+  switch (pathname) {
+    case '/hackathons':
+      return 'hackathons';
+    case '/tracking':
+      return 'projects';
+    case '/project-gallery':
+      return 'gallery';
+    case '/ai-validate':
+      return 'team';
+    case '/settings':
+      return 'settings';
+    case '/profile':
+      return 'profile';
+    case '/dashboard':
+    default:
+      return 'dashboard';
+  }
+}
+
 export default function App() {
   const { user, isAuthenticated, isLoading: authLoading, login, register, logout, refreshUser } = useAuth();
-  const { isDark, setTheme } = useTheme();
 
   // --- Core Routing/Tab state ---
-  const [activeTab, setActiveTab] = useState<'landing' | 'explore' | 'tracker' | 'validator' | 'auth'>('landing');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => activeTabFromPath(window.location.pathname));
 
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<AuthMode>(() => authModeFromPath(window.location.pathname));
   const [pendingTab, setPendingTab] = useState<'tracker' | 'explore' | 'validator' | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<'dashboard' | 'hackathons' | 'projects' | 'team' | 'settings' | 'profile'>('dashboard');
+  const [dashboardTab, setDashboardTab] = useState<DashboardTab>(() => dashboardTabFromPath(window.location.pathname));
 
   const [adminNotice, setAdminNotice] = useState<string | null>(null);
 
@@ -106,14 +196,57 @@ export default function App() {
   const [publicProfileUsername, setPublicProfileUsername] = useState<string | null>(
     () => parsePublicProfileUsername(),
   );
+  const [socialHandles, setSocialHandles] = useState<SocialHandles>(EMPTY_SOCIAL_HANDLES);
+  const [socialSaveMessage, setSocialSaveMessage] = useState<string | null>(null);
+  const [socialSaveLoading, setSocialSaveLoading] = useState(false);
+
+  const applyRoute = useCallback((pathname = window.location.pathname) => {
+    const profileUsername = parsePublicProfileUsername();
+    setPublicProfileUsername(profileUsername);
+    if (profileUsername) return;
+
+    setActiveTab(activeTabFromPath(pathname));
+    setAuthMode(authModeFromPath(pathname));
+    setDashboardTab(dashboardTabFromPath(pathname));
+  }, []);
+
+  const navigateTo = useCallback((path: string) => {
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, '', path);
+    }
+    applyRoute(path);
+  }, [applyRoute]);
+
+  useEffect(() => {
+    if (authLoading || parsePublicProfileUsername()) return;
+
+    const path = window.location.pathname;
+    let nextPath: string | null = null;
+
+    if (isAuthenticated) {
+      if (path === '/' || path === '/login' || path === '/signup') nextPath = '/dashboard';
+      if (path === '/explore') nextPath = '/hackathons';
+      if (path === '/tracker') nextPath = '/tracking';
+    } else if (PROTECTED_PATHS.has(path)) {
+      nextPath = '/login';
+    }
+
+    if (nextPath && nextPath !== path) {
+      window.history.replaceState({}, '', nextPath);
+      applyRoute(nextPath);
+      return;
+    }
+
+    applyRoute(path);
+  }, [applyRoute, authLoading, isAuthenticated]);
 
   // Router and redirection helper functions
   const handleTrackerAccess = () => {
     if (!isAuthenticated) {
       setPendingTab('tracker');
-      setActiveTab('auth');
+      navigateTo('/login');
     } else {
-      setDashboardTab('projects');
+      navigateTo('/tracking');
     }
   };
 
@@ -123,33 +256,97 @@ export default function App() {
     return updated;
   };
 
+  const sanitizeSocialHandle = (field: keyof SocialHandles, value: string) => {
+    const withoutProtocol = value
+      .trim()
+      .replace(/^https?:\/\//i, '')
+      .replace(/^www\./i, '')
+      .split(/[?#]/)[0]
+      .replace(/\/+$/g, '');
+    const handle = withoutProtocol.replace(/^@/, '');
+
+    switch (field) {
+      case 'github':
+        return handle.replace(/^github\.com\//i, '').split('/')[0];
+      case 'linkedin':
+        return handle.replace(/^linkedin\.com\/in\//i, '').split('/')[0];
+      case 'x':
+        return handle.replace(/^(x|twitter)\.com\//i, '').split('/')[0];
+      case 'website':
+        return withoutProtocol;
+    }
+  };
+
+  const patchSocialHandle = (field: keyof SocialHandles, value: string) => {
+    setSocialHandles((prev) => ({ ...prev, [field]: sanitizeSocialHandle(field, value) }));
+    setSocialSaveMessage(null);
+  };
+
+  const saveSocialHandles = async () => {
+    if (!user || socialSaveLoading) return;
+    const normalizedHandles = {
+      github: sanitizeSocialHandle('github', socialHandles.github),
+      linkedin: sanitizeSocialHandle('linkedin', socialHandles.linkedin),
+      x: sanitizeSocialHandle('x', socialHandles.x),
+      website: sanitizeSocialHandle('website', socialHandles.website),
+    };
+    setSocialHandles(normalizedHandles);
+    setSocialSaveLoading(true);
+    setSocialSaveMessage(null);
+    try {
+      await updateProfile({
+        github_username: normalizedHandles.github || null,
+        linkedin_username: normalizedHandles.linkedin || null,
+        twitter_username: normalizedHandles.x || null,
+        website: normalizedHandles.website || null,
+      });
+      await refreshUser();
+      setSocialSaveMessage('Social handles saved.');
+    } catch (error) {
+      setSocialSaveMessage(error instanceof ApiError ? error.message : 'Failed to save social handles.');
+    } finally {
+      setSocialSaveLoading(false);
+    }
+  };
+
   useEffect(() => {
     checkHealth().then(setBackendOnline);
   }, []);
 
   useEffect(() => {
+    if (!user) {
+      setSocialHandles(EMPTY_SOCIAL_HANDLES);
+      return;
+    }
+
+    setSocialHandles({
+      github: user.github_username ?? '',
+      linkedin: user.linkedin_username ?? '',
+      x: user.twitter_username ?? '',
+      website: user.website ?? '',
+    });
+  }, [user]);
+
+  useEffect(() => {
     const syncPublicProfileRoute = () => {
-      setPublicProfileUsername(parsePublicProfileUsername());
+      applyRoute();
     };
     window.addEventListener('popstate', syncPublicProfileRoute);
     return () => window.removeEventListener('popstate', syncPublicProfileRoute);
-  }, []);
+  }, [applyRoute]);
 
   const goHomeFromPublicProfile = useCallback(() => {
-    window.history.pushState({}, '', '/');
-    setPublicProfileUsername(null);
-  }, []);
+    navigateTo('/');
+  }, [navigateTo]);
 
   const goToProfile = useCallback(() => {
     if (!user?.username) return;
-    window.history.pushState({}, '', `/u/${user.username}`);
-    setPublicProfileUsername(user.username);
-  }, [user?.username]);
+    navigateTo(`/u/${user.username}`);
+  }, [navigateTo, user?.username]);
 
   const backToWorkspace = useCallback(() => {
-    window.history.pushState({}, '', '/');
-    setPublicProfileUsername(null);
-  }, []);
+    navigateTo('/dashboard');
+  }, [navigateTo]);
 
   useEffect(() => {
     if (publicProfileUsername && user?.username && publicProfileUsername !== user.username) {
@@ -190,7 +387,7 @@ export default function App() {
     setAuthMode(mode);
     setAuthError(null);
     setApiError(null);
-    setActiveTab('auth');
+    navigateTo(mode === 'login' ? '/login' : '/signup');
   };
 
   const handleAuthenticate = async (e: React.FormEvent) => {
@@ -225,12 +422,12 @@ export default function App() {
 
       if (pendingTab === 'tracker') {
         setTrackHackathonName(pendingRegisterHack?.title ?? trackHackathonName);
-        setDashboardTab('projects');
+        navigateTo('/tracking');
         setPendingRegisterHack(null);
       } else if (pendingTab === 'explore') {
-        setDashboardTab('hackathons');
+        navigateTo('/hackathons');
       } else {
-        setDashboardTab('dashboard');
+        navigateTo('/dashboard');
       }
       setPendingTab(null);
     } catch (err) {
@@ -249,7 +446,7 @@ export default function App() {
   const handleLogout = () => {
     logout();
     setAuthError(null);
-    setActiveTab('landing');
+    navigateTo('/');
     setBookmarkIds(new Set());
     setSavedBookmarks([]);
   };
@@ -306,18 +503,17 @@ export default function App() {
     deleteProject: handleDeleteTracked,
   } = useTrackedProjects(isAuthenticated, setApiError);
 
-  const handleHackathonRegister = async (hackOrTitle: string | {
-    title: string;
-    id?: string;
-    prizePool?: string;
-    deadline?: string;
-    url?: string;
-  }) => {
+  const handleHackathonRegister = async (hackOrTitle: string | RegisterHackathonPayload) => {
     const fromList = typeof hackOrTitle === 'string'
       ? hackathons.find((h) => h.title === hackOrTitle)
       : hackathons.find((h) => h.id === hackOrTitle.id || h.title === hackOrTitle.title);
 
     const title = typeof hackOrTitle === 'string' ? hackOrTitle : hackOrTitle.title;
+    if (isEndedHackathon(fromList) || (typeof hackOrTitle !== 'string' && isEndedHackathon(hackOrTitle))) {
+      setApiError('This hackathon has ended. Registration is no longer available.');
+      return;
+    }
+
     const payload = {
       title,
       id: typeof hackOrTitle === 'string' ? fromList?.id : (hackOrTitle.id ?? fromList?.id),
@@ -348,11 +544,11 @@ export default function App() {
       }
 
       if (isAuthenticated) {
-        setDashboardTab('projects');
+        navigateTo('/tracking');
       } else {
         setPendingRegisterHack(payload);
         setPendingTab('tracker');
-        setActiveTab('auth');
+        navigateTo('/login');
       }
     } catch (err) {
       setApiError(err instanceof ApiError ? err.message : 'Failed to start hackathon tracking.');
@@ -385,7 +581,7 @@ export default function App() {
   const toggleBookmark = async (hackathonId: string) => {
     if (!isAuthenticated) {
       setPendingTab('explore');
-      setActiveTab('auth');
+      navigateTo('/login');
       return;
     }
     setBookmarkLoading(hackathonId);
@@ -437,13 +633,9 @@ export default function App() {
   const [isValidating, setIsValidating] = useState(false);
   const [activeTaglineIndex, setActiveTaglineIndex] = useState(0);
   const [validationResult, setValidationResult] = useState<ValidatorResponse | null>(null);
-  const [isValidatorModalOpen, setIsValidatorModalOpen] = useState(false);
+  const [isAiComingSoonOpen, setIsAiComingSoonOpen] = useState(false);
 
-  useEffect(() => {
-    if (dashboardTab === 'team') {
-      setIsValidatorModalOpen(true);
-    }
-  }, [dashboardTab]);
+  const openAiComingSoon = () => setIsAiComingSoonOpen(true);
 
   // Saved evaluation history (stored in localStorage)
   const [pastValidations, setPastValidations] = useState<{ id: string; title: string; date: string; pitch: string; data: ValidatorResponse }[]>(() => {
@@ -585,36 +777,40 @@ export default function App() {
   );
 
   const renderRegisterButton = (
-    hack: {
-      title: string;
-      id?: string;
-      prizePool?: string;
-      deadline?: string;
-      url?: string;
-    },
+    hack: RegisterHackathonPayload,
     className: string,
     label: React.ReactNode = 'REGISTER',
   ) => {
     const loadingKey = hack.id ?? hack.title;
     const isLoading = registerLoading === loadingKey;
     const isRegistered = isHackathonRegistered(trackedApps, hack);
+    const matchingHack = hackathons.find((h) => h.id === hack.id || h.title === hack.title);
+    const isEnded = isEndedHackathon(hack) || isEndedHackathon(matchingHack);
 
     return (
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          if (isRegistered) return;
+          if (isRegistered || isEnded) return;
           void handleHackathonRegister(hack);
         }}
-        disabled={isLoading || isRegistered}
-        title={isRegistered ? 'You are registered for this hackathon' : undefined}
+        disabled={isLoading || isRegistered || isEnded}
+        title={
+          isEnded
+            ? 'This hackathon has ended'
+            : isRegistered
+              ? 'You are registered for this hackathon'
+              : undefined
+        }
         className={`${className}${
           isRegistered
             ? ' !bg-[#16a34a] !text-white hover:!bg-[#16a34a] hover:!text-white cursor-default'
-            : isLoading
-              ? ' opacity-80 cursor-wait'
-              : ''
+            : isEnded
+              ? ' !bg-zinc-400 !text-white hover:!bg-zinc-400 hover:!text-white cursor-not-allowed opacity-80'
+              : isLoading
+                ? ' opacity-80 cursor-wait'
+                : ''
         }`}
       >
         {isLoading ? (
@@ -624,6 +820,8 @@ export default function App() {
           </span>
         ) : isRegistered ? (
           'REGISTERED'
+        ) : isEnded ? (
+          'EVENT ENDED'
         ) : (
           label
         )}
@@ -660,13 +858,8 @@ export default function App() {
         await handleHackathonRegister(title);
         if (isAuthenticated) setSelectedHackathonId(null);
       }}
-      onValidate={(title) => {
-        setValHackathon(title);
-        if (isAuthenticated) {
-          setIsValidatorModalOpen(true);
-        } else {
-          setActiveTab('validator');
-        }
+      onValidate={() => {
+        openAiComingSoon();
       }}
     />
   ) : null;
@@ -678,12 +871,16 @@ export default function App() {
         onHome={goHomeFromPublicProfile}
         currentUser={user}
         trackedApps={trackedApps}
+        socialHandles={
+          user?.username.toLowerCase() === publicProfileUsername.toLowerCase()
+            ? socialHandles
+            : undefined
+        }
         onBackToWorkspace={isAuthenticated ? backToWorkspace : undefined}
         onOpenPrivateSettings={
           isAuthenticated
             ? () => {
-                backToWorkspace();
-                setDashboardTab('settings');
+                navigateTo('/settings');
               }
             : undefined
         }
@@ -706,7 +903,7 @@ export default function App() {
             <div className="flex items-center gap-3 border-b-2 border-black pb-4">
               <span className="w-5 h-5 bg-[#e63b2e] border-2 border-[#1a1a1a]"></span>
               <span className="font-headline font-black text-2xl tracking-tighter text-[#1a1a1a] uppercase italic select-none">
-                DEVFORGE
+                HackathonFeed
               </span>
             </div>
 
@@ -741,7 +938,7 @@ export default function App() {
             {/* Navigation Lists with Offset Shadows */}
             <nav className="flex flex-col gap-3 mt-8">
               <button
-                onClick={() => setDashboardTab('dashboard')}
+                onClick={() => navigateTo('/dashboard')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                   dashboardTab === 'dashboard'
                     ? 'bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]'
@@ -756,7 +953,7 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => setDashboardTab('hackathons')}
+                onClick={() => navigateTo('/hackathons')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                   dashboardTab === 'hackathons'
                     ? 'bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]'
@@ -771,7 +968,7 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => setDashboardTab('projects')}
+                onClick={() => navigateTo('/tracking')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                   dashboardTab === 'projects'
                     ? 'bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]'
@@ -786,7 +983,22 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => setDashboardTab('team')}
+                onClick={() => navigateTo('/project-gallery')}
+                className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
+                  dashboardTab === 'gallery'
+                    ? 'bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]'
+                    : 'bg-white border-black text-primary hover:bg-[#ffcc00]/10 hover:translate-y-[-2px] active:translate-y-0 shadow-[3px_3px_0px_0px_#1a1a1a]'
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <Layers className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+                  PROJECT GALLERY
+                </span>
+                <span className="text-[10px] opacity-30 select-none">»</span>
+              </button>
+
+              <button
+                onClick={() => navigateTo('/ai-validate')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                   dashboardTab === 'team'
                     ? 'bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]'
@@ -800,42 +1012,23 @@ export default function App() {
                 <span className="text-[10px] opacity-30 select-none">»</span>
               </button>
 
-              <button
-                onClick={() => setDashboardTab('settings')}
-                className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
-                  dashboardTab === 'settings'
-                    ? 'bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]'
-                    : 'bg-white border-black text-primary hover:bg-[#ffcc00]/10 hover:translate-y-[-2px] active:translate-y-0 shadow-[3px_3px_0px_0px_#1a1a1a]'
-                }`}
-              >
-                <span className="flex items-center gap-3">
-                  <Settings className="w-4 h-4 shrink-0" strokeWidth={2.5} />
-                  SETTINGS
-                </span>
-                <span className="text-[10px] opacity-30 select-none">»</span>
-              </button>
             </nav>
           </div>
 
           <div className="mt-8 space-y-4">
-            <button
-              onClick={() => setIsValidatorModalOpen(true)}
-              className="w-full bg-[#1a1a1a] text-white border-3 border-black py-4 px-4 font-headline font-black text-xs uppercase tracking-widest shadow-[4px_4px_0px_0px_#ffcc00] hover:bg-[#ffcc00] hover:text-black hover:translate-y-[-1px] transform duration-100 text-center cursor-pointer active:translate-y-[3px] active:shadow-none"
-            >
-              SUBMIT PROJECT
-            </button>
-
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <span className="font-mono text-[9px] uppercase font-bold text-zinc-500">Appearance</span>
-              <ThemeToggle size="sm" showLabel />
-            </div>
-
             <button 
-              onClick={handleLogout}
-              className="mt-2 flex items-center justify-center gap-2 font-mono text-[10px] uppercase font-bold text-zinc-500 hover:text-[#e63b2e] transition-colors cursor-pointer w-full py-2 border-2 border-transparent hover:border-black hover:bg-white"
+              onClick={() => navigateTo('/settings')}
+              className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
+                dashboardTab === 'settings'
+                  ? 'bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]'
+                  : 'bg-white border-black text-primary hover:bg-[#ffcc00]/10 hover:translate-y-[-2px] active:translate-y-0 shadow-[3px_3px_0px_0px_#1a1a1a]'
+              }`}
             >
-              <LogOut className="w-3.5 h-3.5" strokeWidth={2.5} />
-              TERMINATE SESSION
+              <span className="flex items-center gap-3">
+                <Settings className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+                SETTINGS
+              </span>
+              <span className="text-[10px] opacity-30 select-none">»</span>
             </button>
           </div>
         </aside>
@@ -876,7 +1069,7 @@ export default function App() {
                     BROWSE ACTIVE CYBER FORGES
                   </span>
                   <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter mt-2">
-                    ACTIVE FORGES ({filteredHackathons.length})
+                    HACKATHONS ({hackathonTotal.toLocaleString()})
                   </h2>
                 </div>
                 <button
@@ -1078,6 +1271,21 @@ export default function App() {
           {dashboardTab === 'projects' && (
             <ProjectsTimelineView
               trackedApps={trackedApps}
+              view="all"
+              stepActionLoading={stepActionLoading}
+              onCompleteStep={completeStep}
+              onUndoLastStep={undoLastStep}
+              onToggleMilestone={toggleMilestone}
+              onAddMilestone={handleAddMilestone}
+              onAddNote={addNote}
+              onDeleteProject={handleDeleteTracked}
+            />
+          )}
+
+          {dashboardTab === 'gallery' && (
+            <ProjectsTimelineView
+              trackedApps={trackedApps}
+              view="gallery"
               stepActionLoading={stepActionLoading}
               onCompleteStep={completeStep}
               onUndoLastStep={undoLastStep}
@@ -1093,7 +1301,7 @@ export default function App() {
             SUB-TAB: AI VALIDATE
             --------------------------------------------------------
           */}
-          {dashboardTab === 'team' && !isValidatorModalOpen && (
+          {dashboardTab === 'team' && (
             <div className="space-y-8 animate-fadeIn">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-4 border-black pb-4 mb-8">
                 <div>
@@ -1109,18 +1317,14 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="bg-white border-4 border-black p-10 shadow-[6px_6px_0px_0px_#0055ff] text-center max-w-xl mx-auto">
+              <div className="bg-white border-4 border-black p-10 md:p-16 shadow-[6px_6px_0px_0px_#0055ff] text-center max-w-xl mx-auto">
                 <Sparkles className="w-12 h-12 mx-auto text-[#0055ff] mb-4" strokeWidth={2.5} />
-                <p className="font-mono text-xs uppercase font-bold text-zinc-500 mb-6">
-                  Validate your project pitch before you build or submit.
+                <h3 className="font-headline font-black text-3xl uppercase tracking-tight mb-3">
+                  Coming soon
+                </h3>
+                <p className="font-mono text-xs uppercase font-bold text-zinc-500">
+                  AI idea validation is on the way. Check back soon.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setIsValidatorModalOpen(true)}
-                  className="bg-black text-white font-headline font-black text-sm uppercase px-8 py-4 border-2 border-black shadow-[4px_4px_0px_0px_#ffcc00] hover:bg-[#ffcc00] hover:text-black cursor-pointer"
-                >
-                  Launch AI Validator
-                </button>
               </div>
             </div>
           )}
@@ -1143,7 +1347,7 @@ export default function App() {
                   </h2>
                 </div>
                 <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-sm text-center md:text-right mt-2 md:mt-0 leading-tight">
-                  Tweak live database simulators, credential values and session states.
+                  Manage your profile photo, social handles, and session.
                 </p>
               </div>
 
@@ -1158,67 +1362,121 @@ export default function App() {
                   />
                 )}
 
-                {/* Block 1 */}
-                <div className="bg-white border-3 border-black p-6 shadow-[4px_4px_0px_0px_#101010] rounded-[4px] space-y-4">
-                  <h3 className="font-headline font-black text-lg uppercase text-[#0055ff] border-b border-zinc-100 pb-2">Profile & Credentials</h3>
-                  
-                  <div className="space-y-3 font-mono text-xs">
-                    <p className="text-zinc-600">IDENTIFICATION PROTOCOL: <span className="font-bold text-[#1a1a1a]">{user?.email ?? '—'}</span></p>
-                    <p className="text-zinc-600">BACKEND STATUS: <span className={`font-bold ${backendOnline ? 'text-emerald-600' : 'text-[#e63b2e]'}`}>{backendOnline === null ? 'CHECKING...' : backendOnline ? 'CONNECTED' : 'OFFLINE'}</span></p>
-                    <p className="text-zinc-600">SECURITY INDEX: <span className="font-bold text-[#1a1a1a]">LEVEL 3 ACTIVE CLIENT</span></p>
-                    <p className="text-zinc-600">NEURAL ENGINE INTEGRATION: <span className="font-medium text-emerald-600 font-bold">GOOGLE_GEMINI://V3.5_OK</span></p>
-                    <p className="text-zinc-600">LOCATION ACCESS: <span className="font-bold text-[#1a1a1a]">GLOBAL SECURE REMOTE INGRESS</span></p>
+                <div className="bg-white border-3 border-black p-6 shadow-[4px_4px_0px_0px_#101010] rounded-[4px] space-y-4 md:col-span-2">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-100 pb-2">
+                    <h3 className="font-headline font-black text-lg uppercase text-[#0055ff]">Social Media Handles</h3>
+                    {socialSaveMessage && (
+                      <span className="font-mono text-[10px] uppercase font-bold text-emerald-600">
+                        {socialSaveMessage}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="space-y-1">
+                      <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase font-bold text-zinc-500">
+                        <Github className="w-3.5 h-3.5 text-[#1a1a1a]" />
+                        GitHub
+                      </span>
+                      <div className="flex items-center bg-zinc-50 border-2 border-black">
+                        <span className="px-3 border-r-2 border-black text-zinc-500">
+                          <Github className="w-4 h-4" />
+                        </span>
+                        <input
+                          type="text"
+                          value={socialHandles.github}
+                          onChange={(e) => patchSocialHandle('github', e.target.value)}
+                          placeholder="username"
+                          className="w-full bg-transparent p-3 font-mono text-xs focus:outline-none"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="space-y-1">
+                      <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase font-bold text-zinc-500">
+                        <Linkedin className="w-3.5 h-3.5 text-[#0055ff]" />
+                        LinkedIn
+                      </span>
+                      <div className="flex items-center bg-zinc-50 border-2 border-black">
+                        <span className="px-3 border-r-2 border-black text-[#0055ff]">
+                          <Linkedin className="w-4 h-4" />
+                        </span>
+                        <input
+                          type="text"
+                          value={socialHandles.linkedin}
+                          onChange={(e) => patchSocialHandle('linkedin', e.target.value)}
+                          placeholder="username"
+                          className="w-full bg-transparent p-3 font-mono text-xs focus:outline-none"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="space-y-1">
+                      <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase font-bold text-zinc-500">
+                        <Twitter className="w-3.5 h-3.5 text-[#1d9bf0]" />
+                        X / Twitter
+                      </span>
+                      <div className="flex items-center bg-zinc-50 border-2 border-black">
+                        <span className="px-3 border-r-2 border-black text-[#1d9bf0]">
+                          <Twitter className="w-4 h-4" />
+                        </span>
+                        <input
+                          type="text"
+                          value={socialHandles.x}
+                          onChange={(e) => patchSocialHandle('x', e.target.value)}
+                          placeholder="username"
+                          className="w-full bg-transparent p-3 font-mono text-xs focus:outline-none"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="space-y-1">
+                      <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase font-bold text-zinc-500">
+                        <Globe className="w-3.5 h-3.5 text-emerald-600" />
+                        Portfolio / Website
+                      </span>
+                      <div className="flex items-center bg-zinc-50 border-2 border-black">
+                        <span className="px-3 border-r-2 border-black text-emerald-600">
+                          <Globe className="w-4 h-4" />
+                        </span>
+                        <input
+                          type="text"
+                          value={socialHandles.website}
+                          onChange={(e) => patchSocialHandle('website', e.target.value)}
+                          placeholder="your.site"
+                          className="w-full bg-transparent p-3 font-mono text-xs focus:outline-none"
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={saveSocialHandles}
+                      disabled={socialSaveLoading}
+                      className="bg-[#ffcc00] text-black border-2 border-black px-5 py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait inline-flex items-center gap-2"
+                    >
+                      {socialSaveLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      {socialSaveLoading ? 'Saving...' : 'Save handles'}
+                    </button>
                   </div>
                 </div>
 
-                <div className="bg-white border-3 border-black p-6 shadow-[4px_4px_0px_0px_#101010] rounded-[4px] space-y-4">
-                  <h3 className="font-headline font-black text-lg uppercase text-[#e63b2e] border-b border-zinc-100 pb-2">Appearance</h3>
-                  
-                  <div className="space-y-4 font-mono text-[11px] uppercase font-bold text-zinc-600">
-                    <p className="normal-case text-zinc-500 text-xs leading-relaxed">
-                      Switch between light and dark brutalist themes. Your choice is saved on this device.
+                <div className="bg-white border-3 border-black p-6 shadow-[4px_4px_0px_0px_#101010] rounded-[4px] space-y-4 md:col-span-2">
+                  <h3 className="font-headline font-black text-lg uppercase text-[#e63b2e] border-b border-zinc-100 pb-2">Session</h3>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <p className="font-mono text-[11px] uppercase font-bold text-zinc-600">
+                      Sign out of your HackathonFeed workspace on this device.
                     </p>
-                    <div className="flex items-center justify-between gap-4 pt-2">
-                      <span>Current: <span className="text-[#1a1a1a]">{isDark ? 'Dark' : 'Light'}</span></span>
-                      <ThemeToggle size="md" showLabel />
-                    </div>
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setTheme('light')}
-                        className={`flex-1 py-2 border-2 border-black font-headline font-black text-[10px] uppercase cursor-pointer ${
-                          !isDark ? 'bg-[#ffcc00] text-black' : 'bg-transparent text-zinc-600 hover:bg-zinc-100'
-                        }`}
-                      >
-                        Light
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTheme('dark')}
-                        className={`flex-1 py-2 border-2 border-black font-headline font-black text-[10px] uppercase cursor-pointer ${
-                          isDark ? 'bg-[#ffcc00] text-black' : 'bg-transparent text-zinc-600 hover:bg-zinc-100'
-                        }`}
-                      >
-                        Dark
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Block 2 — simulator options */}
-                <div className="bg-white border-3 border-black p-6 shadow-[4px_4px_0px_0px_#101010] rounded-[4px] space-y-4">
-                  <h3 className="font-headline font-black text-lg uppercase text-[#e63b2e] border-b border-zinc-100 pb-2">Simulator Options</h3>
-                  
-                  <div className="space-y-4 font-mono text-[11px] uppercase font-bold text-zinc-600">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input type="checkbox" defaultChecked className="rounded text-[#0055ff] focus:ring-0 focus:outline-none border-2 border-black w-4 h-4" />
-                      <span>Simulate real-time WebSocket ping state (12ms)</span>
-                    </label>
-
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input type="checkbox" defaultChecked className="rounded text-[#0055ff] focus:ring-0 focus:outline-none border-2 border-black w-4 h-4" />
-                      <span>Persist project trackers into Local Storage</span>
-                    </label>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="inline-flex items-center justify-center gap-2 bg-[#e63b2e] text-white border-2 border-black px-5 py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#101010] hover:bg-black transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" strokeWidth={2.5} />
+                      Log out
+                    </button>
                   </div>
                 </div>
 
@@ -1228,7 +1486,7 @@ export default function App() {
                 bookmarks={savedBookmarks}
                 onRemove={toggleBookmark}
                 onOpenHackathon={setSelectedHackathonId}
-                onBrowseHackathons={() => setDashboardTab('hackathons')}
+                onBrowseHackathons={() => navigateTo('/hackathons')}
               />
 
               {user?.role === 'admin' && (
@@ -1283,188 +1541,11 @@ export default function App() {
 
         </main>
 
-        {/* 
-          ========================================================
-          DYNAMIC AI IDEA CRITIQUE / VALIDATOR MODEL OVERLAY
-          ========================================================
-        */}
-        {isValidatorModalOpen && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn overflow-y-auto">
-            <div className="bg-white border-4 border-black p-6 md:p-10 shadow-[6px_6px_0px_0px_#ffcc00] max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-[8px] flex flex-col gap-6 relative animate-scaleIn">
-              
-              <button 
-                onClick={() => {
-                  setIsValidatorModalOpen(false);
-                  setValidationResult(null);
-                }}
-                className="absolute top-4 right-4 md:top-6 md:right-6 font-headline font-black text-xs uppercase px-3 py-1.5 border-2 border-black bg-[#eee9e0] hover:bg-[#e63b2e] hover:text-white cursor-pointer select-none transition-colors"
-              >
-                ✕ CANCEL PROTOCOL
-              </button>
+        <AiComingSoonModal
+          open={isAiComingSoonOpen}
+          onClose={() => setIsAiComingSoonOpen(false)}
+        />
 
-              <div className="border-b-4 border-black pb-4">
-                <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-0.5 px-2.5 uppercase font-bold tracking-wider">
-                  NEURAL ANALYSIS ENGINE V3.5
-                </span>
-                <h3 className="font-headline font-black text-3xl md:text-4xl uppercase tracking-tighter mt-1">
-                  AI PROJECT IDEA CRITIQUE
-                </h3>
-              </div>
-
-              {/* Pitch input details form */}
-              <form onSubmit={handleValidateIdea} className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-mono text-[10px] uppercase font-bold text-zinc-500 mb-1">Proposed Project Title *</label>
-                    <input 
-                      type="text" required
-                      className="w-full bg-zinc-50 p-3 border-2 border-black font-extrabold text-xs uppercase focus:outline-none"
-                      value={valTitle}
-                      onChange={(e) => setValTitle(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-mono text-[10px] uppercase font-bold text-zinc-500 mb-1">Target Event / Forge *</label>
-                    <select 
-                      className="w-full bg-zinc-50 p-3 border-2 border-black font-extrabold text-xs uppercase focus:outline-none"
-                      value={valHackathon}
-                      onChange={(e) => setValHackathon(e.target.value)}
-                    >
-                      {hackathons.map((h) => (
-                        <option key={h.id} value={h.title}>{h.title}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-mono text-[10px] uppercase font-bold text-zinc-500 mb-1">Proposed Technologies (e.g. Solidity, React, Rust, @google/genai)</label>
-                  <input 
-                    type="text"
-                    className="w-full bg-zinc-50 p-3 border-2 border-black font-extrabold text-xs uppercase focus:outline-none"
-                    value={valStack}
-                    onChange={(e) => setValStack(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-mono text-[10px] uppercase font-bold text-zinc-500 mb-1">Operational Concept Pitch (Raw & Direct)</label>
-                  <textarea 
-                    rows={3} required
-                    className="w-full bg-zinc-50 p-3 border-2 border-black font-semibold text-xs uppercase focus:outline-none font-mono"
-                    value={valPitch}
-                    onChange={(e) => setValPitch(e.target.value)}
-                    placeholder="Describe how your project satisfies Weimar design purity and core gas routing elements..."
-                  />
-                </div>
-
-                <div className="flex justify-between items-center pt-2 border-t border-dashed border-zinc-200">
-                  <p className="font-mono text-[10px] uppercase text-zinc-400 font-bold">Powered by Gemini AI Direct Proxy</p>
-                  <button 
-                    type="submit"
-                    disabled={isValidating}
-                    className="bg-[#ffcc00] border-3 border-black font-headline font-black text-xs uppercase tracking-wider py-3.5 px-8 hover:bg-[#1a1a1a] hover:text-[#ffcc00] cursor-pointer disabled:opacity-55 shadow-[3px_3px_0px_0px_#e63b2e]"
-                  >
-                    {isValidating ? 'RECRUITING CRITIQUE...' : 'SUMMON JURY REPORT'}
-                  </button>
-                </div>
-              </form>
-
-              {/* Dynamic Loading Overlay representation */}
-              {isValidating && (
-                <div className="bg-[#eee9e0] border-3 border-black p-6 text-center space-y-4 animate-pulse rounded-[4px]">
-                  <div className="w-12 h-12 rounded-full border-4 border-black border-t-[#ffcc00] animate-spin mx-auto"></div>
-                  <p className="font-mono text-xs uppercase font-extrabold text-[#1a1a1a]">
-                    {VALIDATION_TAGLINES[activeTaglineIndex]}
-                  </p>
-                </div>
-              )}
-
-              {/* Report Showcase from AI */}
-              {validationResult && !isValidating && (
-                <div className="bg-[#eee9e0] border-3 border-black p-6 rounded-[4px] space-y-6 animate-scaleIn">
-                  <div className="border-b-2 border-black pb-2">
-                    <h4 className="font-headline font-black text-xl text-[#e63b2e] uppercase">Jury Critique Log Report</h4>
-                  </div>
-
-                  {/* Neobrutalist gauges */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-white border-2 border-black p-3.5 text-center shadow-[2px_2px_0px_0px_#101010]">
-                      <span className="font-mono text-[9px] uppercase font-bold text-zinc-400">FEASIBILITY INDEX</span>
-                      <p className="font-headline font-black text-3xl text-[#0055ff]">{validationResult.feasibilityScore}%</p>
-                    </div>
-                    <div className="bg-white border-2 border-black p-3.5 text-center shadow-[2px_2px_0px_0px_#101010]">
-                      <span className="font-mono text-[9px] uppercase font-bold text-zinc-400">ORIGINALITY INDEX</span>
-                      <p className="font-headline font-black text-3xl text-[#e63b2e]">{validationResult.originalityScore}%</p>
-                    </div>
-                    <div className="bg-white border-2 border-black p-3.5 text-center shadow-[2px_2px_0px_0px_#101010]">
-                      <span className="font-mono text-[9px] uppercase font-bold text-zinc-400">BRUTALIST PURITY</span>
-                      <p className="font-headline font-black text-3xl text-emerald-600">{validationResult.brutalistDirectness}%</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <h5 className="font-headline font-black text-sm uppercase text-[#1a1a1a]">EXECUTIVE VERDICT</h5>
-                    <p className="font-mono text-xs uppercase font-bold text-[#e63b2e] bg-white border border-black p-3 leading-snug">{validationResult.verdictSummary}</p>
-                  </div>
-
-                  <div className="space-y-2 font-mono text-xs">
-                    <h5 className="font-headline font-black text-sm uppercase text-[#1a1a1a] font-sans">CRITICAL CRITIQUE LOG</h5>
-                    <div className="bg-white border border-black p-4 leading-relaxed uppercase font-bold text-[#1a1a1a]/85 max-h-48 overflow-y-auto">
-                      <Markdown>{validationResult.critique}</Markdown>
-                    </div>
-                  </div>
-
-                  {/* Upgrades or Teammates list */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                    <div className="bg-white border border-black p-4 space-y-2 rounded-[2px]">
-                      <span className="font-headline font-black text-xs uppercase font-sans text-secondary block">KEY STRENGTHS</span>
-                      {validationResult.keyStrengths.map((str, idx) => (
-                        <p key={idx} className="uppercase font-bold text-emerald-600">✓ {str}</p>
-                      ))}
-                    </div>
-                    <div className="bg-white border border-black p-4 space-y-2 rounded-[2px]">
-                      <span className="font-headline font-black text-xs uppercase font-sans text-[#e63b2e] block">REQUIRED REFACTORS</span>
-                      {validationResult.requiredUpgrades.map((upg, idx) => (
-                        <p key={idx} className="uppercase font-bold text-[#e63b2e]">⚠ {upg}</p>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Proposed aesthetic pairing */}
-                  <div className="bg-[#1a1a1a] text-[#ffcc00] p-4 font-mono text-xs uppercase">
-                    <span className="text-zinc-400 block text-[9px] font-bold">CRAFT LAYOUT THEME DIRECTION:</span>
-                    <p className="font-bold pt-1">{validationResult.visualThemeProposal}</p>
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button 
-                      onClick={async () => {
-                        const hack = hackathons.find((h) => h.title === valHackathon);
-                        await exportValidatedProject({
-                          title: valTitle.trim(),
-                          hackathonName: valHackathon,
-                          hackathonId: hack?.id,
-                          prizePool: hack?.prizePool ?? '—',
-                          deadline: hack?.deadline ?? '',
-                          concept: valPitch.trim(),
-                          validationSummary: validationResult.verdictSummary,
-                        });
-                        setIsValidatorModalOpen(false);
-                        setValidationResult(null);
-                        setDashboardTab('projects');
-                      }}
-                      className="bg-emerald-500 text-white font-headline font-black text-xs uppercase border-2 border-black py-2.5 px-6 shadow-[2px_2px_0px_0px_#101010] hover:bg-black transition-all cursor-pointer"
-                    >
-                      LINK ANALYSIS TO WORKFLOW PIPELINES
-                    </button>
-                  </div>
-                </div>
-              )}
-
-            </div>
-          </div>
-        )}
 
       </div>
       {hackathonDetailModal}
@@ -1481,54 +1562,30 @@ export default function App() {
         TopNavBar: Striking Neo-Brutalist Nav bar
         ========================================================
       */}
-      <nav id="navbar-brutalist" className="bg-white w-full sticky top-0 z-50 border-b-4 border-primary shadow-[0px_4px_0px_0px_#1a1a1a]">
-        <div className="flex flex-col md:flex-row justify-between items-center w-full px-6 py-4 max-w-[1440px] mx-auto gap-4 md:gap-0">
-          <div className="flex items-center gap-3">
-            {/* Visual Red Block representing structural element */}
-            <span className="w-8 h-8 bg-secondary border-3 border-[#1a1a1a] hidden sm:block"></span>
-            
-            <button 
-              onClick={() => { setActiveTab('landing'); clearHackathonFilters(); }}
-              className="text-3xl font-black text-[#1a1a1a] uppercase tracking-tighter font-headline hover:text-secondary transition-colors cursor-pointer text-left"
-            >
-              HACKATHON FEED
-            </button>
+      <nav id="navbar-brutalist" className="bg-[#eee9e0] w-full sticky top-0 z-50 border-b-3 border-primary">
+        <div className="flex justify-between items-center w-full px-4 md:px-6 py-2 max-w-[1440px] mx-auto gap-4">
+          <button
+            onClick={() => { navigateTo('/'); clearHackathonFilters(); }}
+            className="flex items-center gap-2 font-headline font-black text-sm uppercase tracking-tight text-[#1a1a1a] cursor-pointer bg-transparent border-none"
+          >
+            <span className="w-5 h-5 bg-[#ffcc00] border-2 border-black grid place-items-center text-[10px] leading-none">H</span>
+            HackathonFeed
+          </button>
+
+          <div className="hidden md:flex items-center gap-8 font-mono text-[9px] uppercase font-black">
+            <button onClick={() => openAuth('login')} className="border-b-2 border-black bg-transparent cursor-pointer">Discover</button>
+            <button onClick={handleTrackerAccess} className="bg-transparent cursor-pointer">Track</button>
+            <button onClick={() => openAuth('login')} className="bg-transparent cursor-pointer">Validate</button>
+            <button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} className="bg-transparent cursor-pointer">About</button>
           </div>
 
-          {/* Clean minimalist design layout matches the initial mockup screenshot */}
-
-          {isAuthenticated ? (
-            <div className="flex items-center gap-3">
-              <ThemeToggle size="sm" />
-              <div className="hidden sm:block font-mono text-[11px] text-[#1a1a1a] bg-[#eee9e0] border-2 border-[#1a1a1a] px-3 py-1.5 font-bold uppercase tracking-wider">
-                ACTIVE_SYS: <span className="text-secondary">{user?.email}</span>
-              </div>
-              <button 
-                onClick={handleLogout}
-                className="bg-[#e63b2e] text-white font-headline font-black text-xs uppercase px-4 py-2 border-2 border-black hover:bg-black transition-all cursor-pointer"
-              >
-                SIGN OUT
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <ThemeToggle size="sm" />
-              <button
-                type="button"
-                onClick={() => openAuth('login')}
-                className="bg-white text-[#1a1a1a] font-headline font-black text-xs uppercase px-4 py-2 border-2 border-black hover:bg-[#ffcc00] transition-all cursor-pointer"
-              >
-                LOG IN
-              </button>
-              <button
-                type="button"
-                onClick={() => openAuth('register')}
-                className="bg-[#1a1a1a] text-white font-headline font-black text-sm uppercase px-5 py-2.5 border-3 border-black shadow-[4px_4px_0px_0px_#ffcc00] hover:bg-[#ffcc00] hover:text-black transition-all cursor-pointer"
-              >
-                SIGN UP
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => openAuth('register')}
+            className="bg-[#ffcc00] border-2 border-black px-4 py-1.5 font-headline font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer"
+          >
+            Start Building
+          </button>
         </div>
       </nav>
 
@@ -1559,6 +1616,192 @@ export default function App() {
           ========================================================================
         */}
         {activeTab === 'landing' && (
+          <div className="animate-fadeIn bg-[#eee9e0] bg-grid">
+            <section className="relative overflow-hidden border-b-4 border-black min-h-[560px] flex items-center">
+              <div className="max-w-[1440px] mx-auto px-6 py-16 md:py-24 w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+                <div className="lg:col-span-6 relative z-10">
+                  <span className="inline-block bg-black text-white font-mono text-[10px] uppercase font-black px-3 py-1 mb-6">
+                    The developers command center
+                  </span>
+                  <h1 className="font-headline font-black uppercase tracking-tighter leading-[0.86] text-6xl md:text-7xl lg:text-[88px] text-[#1a1a1a]">
+                    Aggregate.<br />
+                    Track.<br />
+                    <span className="text-[#e63b2e]">Validate.</span>
+                  </h1>
+                  <p className="mt-6 max-w-sm border-l-4 border-[#ffcc00] pl-4 font-body text-sm md:text-base font-bold leading-snug text-[#1a1a1a]">
+                    The ultimate Bauhaus-inspired platform to discover global hackathons, manage your applications, and validate ideas with AI.
+                  </p>
+                  <div className="mt-8 flex flex-wrap gap-4">
+                    <button
+                      type="button"
+                      onClick={() => openAuth('register')}
+                      className="bg-[#ffcc00] border-3 border-black px-6 py-3 font-headline font-black text-xs uppercase shadow-[4px_4px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer"
+                    >
+                      Start Building
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openAuth('login')}
+                      className="bg-white border-3 border-black px-6 py-3 font-headline font-black text-xs uppercase shadow-[4px_4px_0px_0px_#101010] hover:bg-[#ffcc00] transition-colors cursor-pointer"
+                    >
+                      Login to Explore
+                    </button>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-6 hidden md:flex justify-center lg:justify-end relative min-h-[330px]">
+                  <div className="absolute right-4 top-8 w-28 h-28 bg-[#e63b2e] rounded-full border-3 border-black" />
+                  <div className="absolute left-4 bottom-16 w-20 h-20 bg-[#ffcc00] border-3 border-black" />
+                  <div className="relative mt-10 w-[430px] h-[230px] bg-[#8a8a82] border-4 border-black shadow-[8px_8px_0px_0px_#101010] rotate-2 grid place-items-center">
+                    <div className="absolute inset-8 border-2 border-black bg-grid opacity-80" />
+                    <div className="relative w-28 h-28 bg-white/80 rounded-full border border-white grid place-items-center">
+                      <div className="bg-black text-white px-5 py-4 font-headline font-black text-sm uppercase leading-tight text-center">
+                        Building<br />Future<br />Of Code
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="bg-[#171717] text-[#ffcc00] border-b-4 border-black">
+              <div className="max-w-[1440px] mx-auto px-6 py-9 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+                <div>
+                  <p className="font-headline font-black text-5xl md:text-6xl tracking-tighter">5000+</p>
+                  <p className="font-mono text-[10px] uppercase font-black text-white mt-1">Hackathons listed</p>
+                </div>
+                <div>
+                  <p className="font-headline font-black text-5xl md:text-6xl tracking-tighter">20k+</p>
+                  <p className="font-mono text-[10px] uppercase font-black text-white mt-1">Active developers</p>
+                </div>
+                <div>
+                  <p className="font-headline font-black text-5xl md:text-6xl tracking-tighter">$2M+</p>
+                  <p className="font-mono text-[10px] uppercase font-black text-white mt-1">Prize pools tracked</p>
+                </div>
+              </div>
+            </section>
+
+            <section className="py-16 md:py-20 border-b-4 border-black">
+              <div className="max-w-[1440px] mx-auto px-6">
+                <h2 className="font-headline font-black uppercase text-4xl md:text-5xl tracking-tighter mb-12">
+                  Core <span className="bg-black text-white px-2">Modules</span>
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {[
+                    {
+                      icon: <Search className="w-6 h-6" />,
+                      title: 'Global Search',
+                      body: 'All hackathons in one place. Filter by tech stack, prize pool, or location with our high-speed indexing engine.',
+                      action: 'Learn More',
+                      onClick: () => openAuth('login'),
+                      color: 'bg-white',
+                      iconColor: 'bg-black text-[#ffcc00]',
+                    },
+                    {
+                      icon: <Calendar className="w-6 h-6" />,
+                      title: 'Application Tracker',
+                      body: 'Never miss a deadline. Centralized dashboard to manage submissions, team formation, and milestone updates.',
+                      action: 'Access Tracker',
+                      onClick: handleTrackerAccess,
+                      color: 'bg-[#ffcc00]',
+                      iconColor: 'bg-black text-[#ffcc00]',
+                    },
+                    {
+                      icon: <HelpCircle className="w-6 h-6" />,
+                      title: 'AI Idea Validator',
+                      body: 'Is your project worth building? Get instant feedback on feasibility, market fit, and prize potential.',
+                      action: 'Test Idea',
+                      onClick: () => openAuth('login'),
+                      color: 'bg-white',
+                      iconColor: 'bg-[#e63b2e] text-white',
+                    },
+                  ].map((module) => (
+                    <article
+                      key={module.title}
+                      onClick={module.onClick}
+                      className={`${module.color} border-4 border-black p-6 min-h-[260px] flex flex-col justify-between shadow-[4px_4px_0px_0px_#101010] hover:-translate-y-1 transition-transform cursor-pointer`}
+                    >
+                      <div>
+                        <div className={`${module.iconColor} w-12 h-12 border-2 border-black grid place-items-center mb-7`}>
+                          {module.icon}
+                        </div>
+                        <h3 className="font-headline font-black text-xl uppercase tracking-tight mb-3">{module.title}</h3>
+                        <p className="font-body text-sm font-bold leading-snug text-[#1a1a1a]/80">{module.body}</p>
+                      </div>
+                      <div className="flex items-center justify-between border-t-2 border-black pt-4 mt-8">
+                        <span className="font-headline font-black text-[10px] uppercase">{module.action}</span>
+                        <span className="font-headline font-black">+</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="py-14 md:py-20 border-b-4 border-black">
+              <div className="max-w-[1440px] mx-auto px-6">
+                <div className="relative overflow-hidden bg-[#171717] text-white border-4 border-black p-8 md:p-14 min-h-[260px]">
+                  <div className="relative z-10 max-w-xl">
+                    <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter leading-none">
+                      Join the <span className="text-[#ffcc00]">Builder</span><br />Revolution.
+                    </h2>
+                    <p className="font-body text-sm font-bold mt-5 mb-8 text-white/80">
+                      Form follows function. Your hackathon journey simplified. Registration is open for the 2024 season.
+                    </p>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        openAuth('register');
+                      }}
+                      className="flex flex-col sm:flex-row gap-3 max-w-lg"
+                    >
+                      <input
+                        type="email"
+                        placeholder="YOUR@EMAIL.COM"
+                        onChange={(e) => setInputEmail(e.target.value)}
+                        className="bg-white text-black border-2 border-black px-4 py-3 font-mono text-xs font-black uppercase focus:outline-none flex-1"
+                      />
+                      <button
+                        type="submit"
+                        className="bg-[#ffcc00] text-black border-2 border-black px-5 py-3 font-headline font-black text-[10px] uppercase hover:bg-white transition-colors cursor-pointer"
+                      >
+                        Register Now
+                      </button>
+                    </form>
+                  </div>
+                  <div className="absolute right-0 top-0 h-full w-1/3 bg-[#ffcc00]/10 skew-x-[-16deg] translate-x-16" />
+                  <div className="absolute right-10 bottom-0 h-40 w-40 bg-[#e63b2e]/30" />
+                </div>
+              </div>
+            </section>
+
+            <footer className="bg-[#171717] text-white border-t-4 border-[#ffcc00] min-h-[260px] relative overflow-hidden">
+              <div className="max-w-[1440px] mx-auto px-6 py-12 flex flex-col md:flex-row justify-between gap-8 relative z-10">
+                <div>
+                  <h3 className="font-headline font-black uppercase text-[#ffcc00] text-xl mb-3">HackathonFeed</h3>
+                  <p className="font-mono text-[9px] uppercase text-white/60 font-bold">
+                    © 2026 HackathonFeed. Form<br />follows function.
+                  </p>
+                </div>
+                <div className="flex gap-8 font-mono text-[9px] uppercase font-black text-white">
+                  <button onClick={() => openAuth('login')} className="bg-transparent cursor-pointer">Terms</button>
+                  <button onClick={() => openAuth('login')} className="bg-transparent cursor-pointer">Privacy</button>
+                  <button onClick={() => openAuth('login')} className="bg-transparent cursor-pointer">Twitter</button>
+                  <button onClick={() => openAuth('login')} className="bg-transparent cursor-pointer">Github</button>
+                </div>
+                <div className="flex gap-2">
+                  <span className="w-8 h-8 bg-white text-black border-2 border-white grid place-items-center font-headline font-black">□</span>
+                  <span className="w-8 h-8 bg-white text-black border-2 border-white grid place-items-center font-headline font-black">*</span>
+                </div>
+              </div>
+              <div className="absolute bottom-0 left-0 w-full font-headline font-black text-[120px] md:text-[180px] uppercase tracking-[0.4em] text-white/[0.03] leading-none pl-6">
+                Bauhaus
+              </div>
+            </footer>
+          </div>
+        )}
+
+        {false && activeTab === 'landing' && (
           <div className="animate-fadeIn">
             
             {/* HERO SECTION CONTAINER - Yellow background matching screenshot exactly */}
@@ -1576,7 +1819,7 @@ export default function App() {
                   <form 
                     onSubmit={(e) => {
                       e.preventDefault();
-                      setActiveTab('explore');
+                      navigateTo('/explore');
                     }}
                     className="bg-white border-4 border-primary w-full max-w-xl shadow-[4px_4px_0px_0px_#1a1a1a] p-2 flex items-center mb-8 gap-3"
                   >
@@ -1619,7 +1862,7 @@ export default function App() {
                 
                 {/* Panel 1 */}
                 <div 
-                  onClick={() => setActiveTab('explore')}
+                  onClick={() => navigateTo('/explore')}
                   className="bg-white border-4 border-primary p-8 flex flex-col justify-between items-start gap-12 group cursor-pointer hover:translate-y-[-4px] active:translate-y-0 transition-all shadow-[6px_6px_0px_0px_#1a1a1a] hover:shadow-[10px_10px_0px_0px_#1a1a1a]"
                 >
                   <div className="w-16 h-16 bg-[#eee9e0] border-3 border-primary flex items-center justify-center group-hover:bg-[#ffcc00] transition-colors shadow-[3px_3px_0px_0px_#1a1a1a]">
@@ -1655,7 +1898,7 @@ export default function App() {
 
                 {/* Panel 3 */}
                 <div 
-                  onClick={() => setActiveTab('validator')}
+                  onClick={() => openAiComingSoon()}
                   className="bg-white border-4 border-primary p-8 flex flex-col justify-between items-start gap-12 group cursor-pointer hover:translate-y-[-4px] active:translate-y-0 transition-all shadow-[6px_6px_0px_0px_#1a1a1a] hover:shadow-[10px_10px_0px_0px_#e63b2e]"
                 >
                   <div className="w-16 h-16 bg-[#eee9e0] border-3 border-primary flex items-center justify-center group-hover:bg-[#e63b2e] group-hover:text-white transition-colors shadow-[3px_3px_0px_0px_#1a1a1a]">
@@ -1686,7 +1929,7 @@ export default function App() {
                   
                   {/* Block 01 */}
                   <div 
-                    onClick={() => setActiveTab('explore')}
+                    onClick={() => navigateTo('/explore')}
                     className="bg-[#ffcc00] border-4 border-primary p-6 shadow-[5px_5px_0px_0px_#1a1a1a] flex flex-col gap-8 cursor-pointer hover:-translate-y-1 transition-all"
                   >
                     <span className="font-headline font-black text-3xl">01</span>
@@ -1700,7 +1943,7 @@ export default function App() {
 
                   {/* Block 02 */}
                   <div 
-                    onClick={() => setActiveTab('validator')}
+                    onClick={() => openAiComingSoon()}
                     className="bg-[#eee9e0] border-4 border-primary p-6 shadow-[5px_5px_0px_0px_#1a1a1a] flex flex-col gap-8 cursor-pointer hover:-translate-y-1 transition-all"
                   >
                     <span className="font-headline font-black text-3xl">02</span>
@@ -1754,7 +1997,7 @@ export default function App() {
                     TRENDING FORGES
                   </h2>
                   <button 
-                    onClick={() => setActiveTab('explore')}
+                    onClick={() => navigateTo('/explore')}
                     className="font-headline font-bold text-sm uppercase text-[#ffcc00] hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     VIEW ALL ↗
@@ -1790,7 +2033,7 @@ export default function App() {
                         <button 
                           onClick={() => {
                             setValHackathon('AGI Frontiers');
-                            setActiveTab('validator');
+                            openAiComingSoon();
                           }}
                           className="bg-[#eee9e0] border-2 border-primary text-[10px] font-headline font-black px-3 py-1.5 uppercase hover:bg-[#ffcc00]"
                         >
@@ -1831,7 +2074,7 @@ export default function App() {
                         <button 
                           onClick={() => {
                             setValHackathon('DeFi Summer Hack');
-                            setActiveTab('validator');
+                            openAiComingSoon();
                           }}
                           className="bg-white border-2 border-primary text-[10px] font-headline font-black px-3 py-1.5 uppercase hover:bg-[#0055ff] hover:text-white"
                         >
@@ -1958,7 +2201,7 @@ export default function App() {
                 </h2>
                 
                 <button 
-                  onClick={() => setActiveTab('validator')}
+                  onClick={() => openAiComingSoon()}
                   className="bg-[#1a1a1a] text-white font-headline font-black text-xl uppercase px-12 py-5 border-4 border-white shadow-[6px_6px_0px_0px_#ffcc00] hover:bg-white hover:text-black hover:shadow-none transition-all active:translate-x-1 active:translate-y-1 cursor-pointer"
                 >
                   JOIN NOW ↗
@@ -1974,7 +2217,7 @@ export default function App() {
           TAB 1: HOME LANDING & HACKATHON EXPLORATION
           ========================================================================
         */}
-        {activeTab === 'explore' && (
+        {false && activeTab === 'explore' && (
           <div>
             
             {/* HERO SECTION CONTAINER */}
@@ -2022,7 +2265,7 @@ export default function App() {
 
                   <div className="flex flex-wrap gap-3">
                     <button 
-                      onClick={() => { setActiveTab('validator'); }}
+                      onClick={() => { openAiComingSoon(); }}
                       className="inline-block bg-primary text-background font-headline font-black text-lg md:text-xl uppercase px-8 py-4 bauhaus-border bauhaus-shadow hover:bg-background hover:text-primary transition-all duration-100 hover:-translate-y-1 hover:-translate-x-1 hover:shadow-[8px_8px_0px_0px_#1a1a1a] active:translate-x-[6px] active:translate-y-[6px] active:shadow-none cursor-pointer"
                     >
                       Summon AI Validator
@@ -2167,7 +2410,9 @@ export default function App() {
                     Explore available hackathons. Select a card to recruit team members or trigger validation.
                   </p>
                 </div>
-                {(hackathonFilters.theme || hackathonFilters.domain || hackathonFilters.platform) && (
+                {(hackathonFilters.theme.length > 0 ||
+                  hackathonFilters.domain.length > 0 ||
+                  hackathonFilters.platform.length > 0) && (
                   <span className="font-mono text-xs bg-secondary text-white py-1 px-3 border-2 border-primary mt-2 md:mt-0">
                     Filtered
                   </span>
@@ -2272,7 +2517,7 @@ export default function App() {
                           <button 
                             onClick={() => {
                               setValHackathon(hack.title);
-                              setActiveTab('validator');
+                              openAiComingSoon();
                             }}
                             className="bg-primary-container border-2 border-primary p-2 text-xs font-headline font-black uppercase tracking-tight flex items-center gap-1 hover:bg-secondary hover:text-white transition-all cursor-pointer shadow-[2px_2px_0px_0px_#1a1a1a]"
                             title="Analyze proposed idea for this event"
@@ -2665,9 +2910,7 @@ export default function App() {
           ========================================================================
         */}
         {activeTab === 'validator' && (
-          <div className="max-w-[1440px] mx-auto px-6 py-12">
-            
-            {/* Header banner */}
+          <div className="max-w-[1440px] mx-auto px-6 py-12 animate-fadeIn">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end border-b-4 border-primary pb-6 mb-10 gap-4">
               <div>
                 <span className="font-mono text-xs bg-secondary text-white py-1 px-3 uppercase font-bold tracking-widest flex items-center gap-2 w-fit">
@@ -2678,367 +2921,16 @@ export default function App() {
                   AI IDEA VALIDATOR
                 </h2>
               </div>
-              <p className="font-mono text-xs uppercase text-[#1a1a1a]/60 max-w-md font-bold">
-                Run your hackathon draft concept through our elite jurors. Get scores, checklists, teammate rosters, and architectural critique.
+            </div>
+            <div className="bg-white border-4 border-primary p-10 md:p-16 shadow-[6px_6px_0px_0px_#1a1a1a] text-center max-w-xl mx-auto">
+              <Sparkles className="w-12 h-12 mx-auto text-[#0055ff] mb-4" strokeWidth={2.5} />
+              <h3 className="font-headline font-black text-3xl uppercase tracking-tight mb-3">
+                Coming soon
+              </h3>
+              <p className="font-mono text-xs uppercase font-bold text-zinc-500">
+                AI idea validation is on the way. Check back soon.
               </p>
             </div>
-
-            {/* Split layout: Input Panel on Left, Result Workspace on Right */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              
-              {/* Form Input Deck (lg:col-span-5) */}
-              <div className="lg:col-span-5 flex flex-col gap-6">
-                
-                <div className="bg-white border-4 border-primary p-6 shadow-[6px_6px_0px_0px_#1a1a1a] space-y-5">
-                  
-                  <div className="flex justify-between items-center pb-2 border-b-2 border-primary">
-                    <span className="font-headline font-black uppercase text-base text-secondary flex items-center gap-1.5">
-                      <Layers className="w-5 h-5 text-[#0055ff]" />
-                      Composition Deck
-                    </span>
-                    <span className="font-mono text-[9px] bg-primary text-background px-2 font-bold py-0.5">GEMINI FLASH V3.5</span>
-                  </div>
-
-                  <form onSubmit={handleValidateIdea} className="space-y-4">
-                    
-                    <div>
-                      <label className="block font-mono text-[11px] uppercase font-black text-[#1a1a1a] mb-1">
-                        1. Proposed App Project Title *
-                      </label>
-                      <input 
-                        type="text" required
-                        className="w-full bg-surface-container p-3 border-2 border-primary tracking-wide focus:outline-none uppercase text-xs font-mono font-black"
-                        placeholder="e.g. AGI Sovereign Middleware"
-                        value={valTitle}
-                        onChange={(e) => setValTitle(e.target.value)}
-                        disabled={isValidating}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-mono text-[11px] uppercase font-black text-[#1a1a1a] mb-1">
-                        2. Target Hackathon Forge *
-                      </label>
-                      <select 
-                        className="w-full bg-surface-container p-3 border-2 border-primary text-xs uppercase font-extrabold focus:outline-none"
-                        value={valHackathon}
-                        onChange={(e) => setValHackathon(e.target.value)}
-                        disabled={isValidating}
-                      >
-                        {hackathons.map((h) => (
-                          <option key={h.id} value={h.title}>
-                            {h.title}
-                          </option>
-                        ))}
-                        <option value="Any global hackathon">Other Global Forge (Indie)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block font-mono text-[11px] uppercase font-black text-[#1a1a1a] mb-1">
-                        3. Intended Technology Stack
-                      </label>
-                      <input 
-                        type="text"
-                        className="w-full bg-surface-container p-3 border-2 border-primary tracking-wide focus:outline-none uppercase text-xs font-mono font-bold"
-                        placeholder="e.g. solidity, react, python, webrtc"
-                        value={valStack}
-                        onChange={(e) => setValStack(e.target.value)}
-                        disabled={isValidating}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-mono text-[11px] uppercase font-black text-[#1a1a1a] mb-1">
-                        4. Concept & Innovation Pitch *
-                      </label>
-                      <textarea 
-                        rows={6} required
-                        className="w-full bg-surface-container p-3 border-2 border-primary tracking-wide focus:outline-none text-xs font-mono text-primary font-bold uppercase"
-                        placeholder="Detail the actual engineering flow. Speak conceptually about what you will build. Avoid flowery corporate jargon, solve the user problem directly..."
-                        value={valPitch}
-                        onChange={(e) => setValPitch(e.target.value)}
-                        disabled={isValidating}
-                      />
-                    </div>
-
-                    <button 
-                      type="submit"
-                      disabled={isValidating || !valTitle.trim() || !valPitch.trim()}
-                      className="w-full flex items-center justify-center gap-3 bg-[#e63b2e] text-white py-4 font-headline uppercase font-black text-sm border-3 border-black shadow-[4px_4px_0px_0px_#1a1a1a] tracking-wider hover:bg-black hover:text-white transition-all text-center cursor-pointer disabled:opacity-50"
-                    >
-                      {isValidating ? (
-                        <>
-                          <Clock className="w-5 h-5 animate-spin" />
-                          ENGINES POWERING ON...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-5 h-5 text-[#ffcc00]" />
-                          VALIDATE WITH NEURAL AJUROR
-                        </>
-                      )}
-                    </button>
-
-                  </form>
-
-                </div>
-
-                {/* Past brainstorming local history list card */}
-                {pastValidations.length > 0 && (
-                  <div className="bg-[#1a1a1a] text-white p-6 border-4 border-primary">
-                    <div className="flex justify-between items-center pb-2 border-b-2 border-[#f5f0e8]/20 mb-4">
-                      <span className="font-headline font-black uppercase text-sm text-[#ffcc00]">
-                        Brainstorm Archives ({pastValidations.length})
-                      </span>
-                      <button 
-                        onClick={clearEvaluationHistory}
-                        className="text-[10px] font-mono text-secondary hover:text-white transition-colors cursor-pointer uppercase border border-secondary px-1"
-                        title="Delete past history from explorer"
-                      >
-                        Clear
-                      </button>
-                    </div>
-
-                    <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2">
-                      {pastValidations.map((hist) => (
-                        <div 
-                          key={hist.id}
-                          onClick={() => {
-                            setValidationResult(hist.data);
-                            setValTitle(hist.title);
-                            setValPitch(hist.pitch);
-                          }}
-                          className="p-3 border-2 border-[#f5f0e8]/20 bg-[#1a1a1a] hover:bg-[#faf7f2]/10 cursor-pointer font-mono text-xs flex flex-col justify-between"
-                        >
-                          <div className="flex justify-between items-center text-[10px] text-white/50 mb-1">
-                            <span>#{hist.data.feasibilityScore}/10 Feasibility</span>
-                            <span>{hist.date}</span>
-                          </div>
-                          <span className="font-headline font-extrabold text-[#ffcc00] uppercase truncate">
-                            {hist.title}
-                          </span>
-                          <span className="text-[10px] text-white/60 uppercase line-clamp-1 truncate block">
-                            {hist.pitch}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-              </div>
-
-              {/* Outputs panel on Right (lg:col-span-7) */}
-              <div className="lg:col-span-7">
-                
-                {/* 1. Loading active state screen */}
-                {isValidating && (
-                  <div className="bg-[#eee9e0] border-4 border-dashed border-primary/50 text-center py-24 px-6 flex flex-col items-center justify-center gap-6">
-                    <div className="relative">
-                      {/* Stylized custom CSS spinner blocks */}
-                      <div className="w-16 h-16 border-8 border-secondary border-t-primary-container animate-spin rounded-none"></div>
-                      <span className="absolute top-5 left-5 text-xl font-bold select-none text-secondary">✦</span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="font-headline text-2xl font-black uppercase text-primary tracking-wide">
-                        Constructing Critical Verdict
-                      </p>
-                      
-                      <div className="bg-primary text-background font-mono text-xs uppercase px-4 py-2 font-bold inline-block border-2 border-primary animate-pulse">
-                        &quot; {VALIDATION_TAGLINES[activeTaglineIndex]} &quot;
-                      </div>
-                    </div>
-
-                    <p className="font-mono text-[10px] uppercase text-[#1a1a1a]/60 max-w-sm">
-                      Form following function. The Gemini Chief strategist model compiles your technologic stack constraints against real hackathon scoring schemas.
-                    </p>
-                  </div>
-                )}
-
-                {/* 2. Standard inactive blank placeholder */}
-                {!isValidating && !validationResult && (
-                  <div className="bg-background border-4 border-dashed border-primary/40 text-center py-24 px-6 flex flex-col items-center justify-center gap-4">
-                    <span className="text-6xl text-secondary">✦</span>
-                    <div>
-                      <h4 className="font-headline text-2xl font-black uppercase text-primary">
-                        No active validation feedback
-                      </h4>
-                      <p className="font-mono text-xs uppercase text-primary/60 mt-1 max-w-md mx-auto">
-                        Your draft coordinates have not been sent yet. Click the &ldquo;Compile with Neural Ajuror&rdquo; button to analyze technical feasibility.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. Output Result Active Dashboard card */}
-                {validationResult && (
-                  <div className="space-y-6">
-                    
-                    {/* Scores dashboard overview */}
-                    <div className="bg-white border-4 border-primary p-6 shadow-[6px_6px_0px_0px_#1a1a1a]">
-                      
-                      <div className="flex justify-between items-center pb-2 border-b-2 border-[#1a1a1a] mb-6">
-                        <span className="font-headline font-black text-xl uppercase text-secondary">
-                          Jurist Board Analytics
-                        </span>
-                        <span className="font-mono text-xs uppercase font-extrabold bg-primary text-background px-2">
-                          Evaluated
-                        </span>
-                      </div>
-
-                      {/* Score metrics bar grids */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        
-                        {/* Metric 1 */}
-                        <div className="bg-surface-container-low border-2 border-primary p-4 flex flex-col justify-between items-center text-center">
-                          <span className="font-mono text-[10px] uppercase font-bold text-primary/60">
-                            Technical Feasibility
-                          </span>
-                          <span className="font-headline font-black text-5xl text-[#0055ff] my-2 select-none">
-                            {validationResult.feasibilityScore}<span className="text-xl text-[#1a1a1a]">/10</span>
-                          </span>
-                          {/* Colored block bar representation representing Bauhaus visual */}
-                          <div className="w-full bg-primary/10 h-2 border border-primary">
-                            <div className="bg-[#0055ff] h-full" style={{ width: `${validationResult.feasibilityScore * 10}%` }}></div>
-                          </div>
-                        </div>
-
-                        {/* Metric 2 */}
-                        <div className="bg-surface-container-low border-2 border-primary p-4 flex flex-col justify-between items-center text-center">
-                          <span className="font-mono text-[10px] uppercase font-bold text-primary/60">
-                            Originality Quotient
-                          </span>
-                          <span className="font-headline font-black text-5xl text-secondary my-2 select-none">
-                            {validationResult.originalityScore}<span className="text-xl text-[#1a1a1a]">/10</span>
-                          </span>
-                          <div className="w-full bg-primary/10 h-2 border border-primary">
-                            <div className="bg-secondary h-full" style={{ width: `${validationResult.originalityScore * 10}%` }}></div>
-                          </div>
-                        </div>
-
-                        {/* Metric 3 */}
-                        <div className="bg-surface-container-low border-2 border-primary p-4 flex flex-col justify-between items-center text-center">
-                          <span className="font-mono text-[10px] uppercase font-bold text-primary/60">
-                            Brutalist Directiveness
-                          </span>
-                          <span className="font-headline font-black text-5xl text-[#1a1a1a] my-2 select-none">
-                            {validationResult.brutalistDirectness}<span className="text-xl text-[#1a1a1a]">/10</span>
-                          </span>
-                          <div className="w-full bg-primary/10 h-2 border border-primary">
-                            <div className="bg-[#1a1a1a] h-full" style={{ width: `${validationResult.brutalistDirectness * 10}%` }}></div>
-                          </div>
-                        </div>
-
-                      </div>
-
-                      {/* Verdict banner */}
-                      <div className="bg-[#ffcc00] border-2 border-primary p-4 font-mono font-bold text-xs uppercase mb-6 text-[#1a1a1a]">
-                        <span className="font-extrabold text-secondary block mb-1">■ Core Verdict Tagline:</span>
-                        &ldquo; {validationResult.verdictSummary} &rdquo;
-                      </div>
-
-                      {/* Checklist Upgrades to win */}
-                      <div className="space-y-4">
-                        <h4 className="font-headline font-black text-sm uppercase text-[#1a1a1a] flex items-center gap-1">
-                          <CheckCircle2 className="w-4 h-4 text-secondary" />
-                          Required Upgrades to Take First Place:
-                        </h4>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          {validationResult.requiredUpgrades.map((upgrade, i) => (
-                            <div key={i} className="bg-surface-container-lowest border-2 border-primary p-3 font-mono text-[11px] font-bold uppercase text-secondary">
-                              <span className="text-primary font-black mr-1">{i + 1}.</span> {upgrade}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* Master art critic critique panel */}
-                    <div className="bg-white border-4 border-primary p-6 shadow-[6px_6px_0px_0px_#1a1a1a] space-y-4">
-                      
-                      <div className="flex justify-between items-center pb-2 border-b-2 border-primary">
-                        <span className="font-headline font-black text-sm uppercase text-[#1a1a1a] flex items-center gap-1.5">
-                          <BookOpen className="w-4 h-4 text-[#0055ff]" />
-                          Weimar-Tech Architectural Review
-                        </span>
-                        <span className="font-mono text-[9px] uppercase font-bold text-secondary">Master Evaluation</span>
-                      </div>
-
-                      {/* Markdown rendered layout review */}
-                      <div className="text-xs font-mono critic-content">
-                        <Markdown>{validationResult.critique}</Markdown>
-                      </div>
-
-                    </div>
-
-                    {/* Roster & Styling blocks */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      
-                      {/* Teammates recommendation card */}
-                      <div className="bg-white border-4 border-primary p-4 shadow-[4px_4px_0px_0px_#1a1a1a] space-y-3">
-                        <h4 className="font-headline font-black text-xs uppercase text-secondary flex items-center gap-1.5">
-                          <Users className="w-4 h-4 text-[#0055ff]" />
-                          Recruit These Experts:
-                        </h4>
-                        
-                        <ul className="space-y-2">
-                          {validationResult.suggestedTeammates.map((teammate, i) => (
-                            <li key={i} className="font-mono text-[10px] font-bold uppercase p-2 bg-surface-container-low border border-primary leading-tight">
-                              <span className="text-secondary font-black block mb-0.5">■ Role {i+1}</span>
-                              {teammate}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {/* Styling Proposal */}
-                      <div className="bg-primary text-white border-4 border-primary p-4 shadow-[4px_4px_0px_0px_#ffcc00] space-y-3">
-                        <h4 className="font-headline font-black text-xs uppercase text-[#ffcc00] flex items-center gap-1.5">
-                          <Layers className="w-4 h-4 text-white" />
-                          Front-End Visual Motif:
-                        </h4>
-                        
-                        <p className="font-mono text-[10px] text-white/90 leading-relaxed uppercase">
-                          {validationResult.visualThemeProposal}
-                        </p>
-
-                        <div className="flex items-center gap-2 pt-2 border-t border-white/20">
-                          <button 
-                            onClick={async () => {
-                              const hack = hackathons.find((h) => h.title === valHackathon);
-                              await exportValidatedProject({
-                                title: valTitle.trim(),
-                                hackathonName: valHackathon,
-                                hackathonId: hack?.id,
-                                prizePool: hack?.prizePool ?? '$100,000',
-                                deadline: hack?.deadline ?? '',
-                                concept: validationResult.verdictSummary,
-                                validationSummary: validationResult.verdictSummary,
-                                extraMilestones: validationResult.requiredUpgrades,
-                                extraTeam: ['Lead Builder', 'Architect API proxy'],
-                              });
-                              setActiveTab('tracker');
-                            }}
-                            className="bg-white text-black text-[10px] font-headline font-black py-2 px-3 uppercase border-2 border-white hover:bg-secondary hover:text-white transition-all cursor-pointer inline-block"
-                          >
-                            Export project to Tracker
-                          </button>
-                        </div>
-                      </div>
-
-                    </div>
-
-                  </div>
-                )}
-
-              </div>
-
-            </div>
-
           </div>
         )}
 
@@ -3054,7 +2946,7 @@ export default function App() {
               {/* Back button link */}
               <button 
                 onClick={() => {
-                  setActiveTab('landing');
+                  navigateTo('/');
                   setPendingTab(null);
                 }}
                 className="absolute top-6 left-6 md:top-8 md:left-8 flex items-center gap-1.5 font-headline font-black text-xs uppercase tracking-wider text-primary hover:text-[#e63b2e] group transition-colors cursor-pointer"
@@ -3112,7 +3004,7 @@ export default function App() {
                 <div className="flex items-center gap-6 mb-8 font-headline">
                   <button 
                     type="button"
-                    onClick={() => { setAuthMode('login'); setAuthError(null); }}
+                    onClick={() => { navigateTo('/login'); setAuthError(null); }}
                     className={`text-sm tracking-wider uppercase font-black transition-colors pb-1 cursor-pointer ${
                       authMode === 'login' 
                         ? 'text-primary border-b-4 border-primary' 
@@ -3124,7 +3016,7 @@ export default function App() {
                   <span className="text-primary/30 text-xl font-thin select-none">|</span>
                   <button 
                     type="button"
-                    onClick={() => { setAuthMode('register'); setAuthError(null); }}
+                    onClick={() => { navigateTo('/signup'); setAuthError(null); }}
                     className={`text-sm tracking-wider uppercase font-black transition-colors pb-1 cursor-pointer ${
                       authMode === 'register' 
                         ? 'text-primary border-b-4 border-[#ffcc00]' 
@@ -3252,6 +3144,10 @@ export default function App() {
 
     </div>
     {hackathonDetailModal}
+    <AiComingSoonModal
+      open={isAiComingSoonOpen}
+      onClose={() => setIsAiComingSoonOpen(false)}
+    />
     </>
   );
 }

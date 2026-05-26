@@ -14,6 +14,10 @@ export async function updateProfile(data: {
   username?: string;
   interests?: string[];
   avatar_url?: string | null;
+  github_username?: string | null;
+  linkedin_username?: string | null;
+  twitter_username?: string | null;
+  website?: string | null;
 }): Promise<User> {
   return apiRequest<User>('/users/me', {
     method: 'PATCH',

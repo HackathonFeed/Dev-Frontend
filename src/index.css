@@ -1,9 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;900&family=Inter:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
-/* ── Brutalist palette (light / dark via class on <html>) ── */
+/* ── Brutalist palette ── */
 :root {
   --hf-bg: #f5f0e8;
   --hf-bg-elevated: #faf7f2;
@@ -20,21 +18,6 @@
   --hf-accent-yellow: #ffcc00;
   --hf-accent-blue: #0055ff;
   --hf-accent-red: #e63b2e;
-}
-
-html.dark {
-  --hf-bg: #0a0a0b;
-  --hf-bg-elevated: #141416;
-  --hf-bg-sidebar: #101012;
-  --hf-bg-card: #1a1a1e;
-  --hf-bg-input: #27272a;
-  --hf-ink: #fafafa;
-  --hf-ink-muted: #a1a1aa;
-  --hf-border: #d4d4d8;
-  --hf-shadow: #ffcc00;
-  --hf-grid-line: rgba(250, 250, 250, 0.05);
-  --hf-grid-line-light: rgba(255, 204, 0, 0.08);
-  --hf-scrollbar-track: #141416;
 }
 
 @theme {
@@ -99,12 +82,6 @@ html.dark {
   --color-hf-elevated: var(--hf-bg-elevated);
 }
 
-html.dark {
-  --color-outline-variant: #3f3f46;
-  --color-tertiary-container: #1e3a5f;
-  --color-secondary-container: #5c2018;
-}
-
 .bauhaus-shadow {
   box-shadow: 6px 6px 0px 0px var(--hf-shadow);
 }
@@ -165,158 +142,4 @@ body {
 .reactive-card:hover {
   transform: translate(-3px, -3px);
   box-shadow: 9px 9px 0px 0px var(--hf-shadow);
-}
-
-/* ── Dark mode: remap hardcoded light-theme Tailwind utilities ── */
-
-/* Backgrounds */
-html.dark [class*="bg-[#f5f0e8]"],
-html.dark [class*="bg-[#f5f5f5]"] {
-  background-color: var(--hf-bg) !important;
-}
-
-html.dark [class*="bg-[#faf7f2]"] {
-  background-color: var(--hf-bg-elevated) !important;
-}
-
-html.dark [class*="bg-[#eee9e0]"],
-html.dark [class*="bg-[#fcfbfa]"] {
-  background-color: var(--hf-bg-sidebar) !important;
-}
-
-html.dark [class*="bg-[#e8e3da]"] {
-  background-color: var(--hf-bg-elevated) !important;
-}
-
-html.dark [class*="bg-zinc-50"],
-html.dark [class*="bg-zinc-100"],
-html.dark [class*="bg-zinc-200"] {
-  background-color: var(--hf-bg-elevated) !important;
-}
-
-html.dark [class~="bg-white"]:not([class*="hover:bg-white"]) {
-  background-color: var(--hf-bg-card) !important;
-}
-
-/* Primary body text — keep black on yellow accent surfaces */
-html.dark
-  :is(
-    [class*="text-[#1a1a1a]"],
-    [class*="text-black"],
-    [class*="text-zinc-900"],
-    [class*="text-zinc-800"]
-  ):not([class*="bg-[#1a1a1a]"]):not([class*="bg-[#ffcc00]"]):not([class*="bg-black"]) {
-  color: var(--hf-ink) !important;
-}
-
-html.dark [class*="text-zinc-500"],
-html.dark [class*="text-zinc-600"],
-html.dark [class*="text-zinc-700"] {
-  color: var(--hf-ink-muted) !important;
-}
-
-html.dark [class*="text-zinc-400"],
-html.dark [class*="text-zinc-300"] {
-  color: #71717a !important;
-}
-
-/* Yellow accent surfaces always use dark ink (parent or self) */
-html.dark [class*="bg-[#ffcc00]"] {
-  color: #1a1a1a;
-}
-
-html.dark
-  [class*="bg-[#ffcc00]"]
-  :is(
-    [class*="text-[#1a1a1a]"],
-    [class*="text-black"],
-    [class*="text-zinc-900"],
-    [class*="text-zinc-800"],
-    [class*="text-zinc-500"],
-    [class*="text-zinc-600"],
-    [class*="text-zinc-700"],
-    [class*="text-primary"]
-  ):not([class*="bg-[#1a1a1a]"]):not([class*="bg-black"]) {
-  color: #1a1a1a !important;
-}
-
-/* Placeholders & text selection */
-html.dark [class*="placeholder:text-[#1a1a1a]"]::placeholder,
-html.dark [class*="placeholder:text-zinc-400"]::placeholder,
-html.dark [class*="placeholder:text-zinc-300"]::placeholder,
-html.dark [class*="placeholder:text-primary"]::placeholder {
-  color: color-mix(in srgb, var(--hf-ink) 35%, transparent) !important;
-}
-
-html.dark [class*="selection:text-[#1a1a1a]"] ::selection,
-html.dark [class*="selection:text-[#1a1a1a]"]::selection {
-  color: var(--hf-ink) !important;
-}
-
-/* Hover text on accent buttons */
-html.dark [class*="hover:text-black"]:hover,
-html.dark [class*="hover:text-[#1a1a1a]"]:hover {
-  color: #1a1a1a !important;
-}
-
-/* Borders */
-html.dark [class*="border-black"],
-html.dark [class*="border-[#1a1a1a]"] {
-  border-color: var(--hf-border) !important;
-}
-
-html.dark [class*="border-zinc-100"],
-html.dark [class*="border-zinc-200"],
-html.dark [class*="border-zinc-300"] {
-  border-color: #3f3f46 !important;
-}
-
-/* Form controls */
-html.dark input:not([type="checkbox"]):not([type="radio"]),
-html.dark select,
-html.dark textarea {
-  background-color: var(--hf-bg-input);
-  color: var(--hf-ink);
-}
-
-html.dark input::placeholder,
-html.dark textarea::placeholder {
-  color: color-mix(in srgb, var(--hf-ink) 35%, transparent);
-}
-
-/* Layout regions */
-html.dark #root,
-html.dark #authenticated-workspace {
-  color: var(--hf-ink);
-}
-
-html.dark #footer-brutalist {
-  background-color: #050505 !important;
-  border-top-color: var(--hf-accent-yellow) !important;
-}
-
-html.dark main.bg-white,
-html.dark main[class*="bg-white"] {
-  background-color: var(--hf-bg-card) !important;
-}
-
-html.dark [class*="hover:bg-white"]:hover,
-html.dark [class*="hover:bg-zinc-100"]:hover {
-  background-color: var(--hf-bg-elevated) !important;
-}
-
-html.dark [class*="shadow-["][class*="#1a1a1a]"],
-html.dark [class*="shadow-["][class*="#101010]"],
-html.dark [class*="shadow-["][class*="#ffffff]"] {
-  --tw-shadow-color: var(--hf-shadow);
-}
-
-/* Markdown / prose blocks inside cards */
-html.dark .prose,
-html.dark [class*="prose"] {
-  color: var(--hf-ink);
-}
-
-html.dark .prose :where(p, li, h1, h2, h3, h4, strong, em, blockquote) {
-  color: inherit;
 }

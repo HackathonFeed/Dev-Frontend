@@ -15,6 +15,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import type { JourneyStepId, TrackedApplication } from '../types';
+import { AiComingSoonModal } from './AiComingSoonModal';
 import {
   JOURNEY_STEPS,
   formatDeadline,
@@ -30,6 +31,7 @@ import {
 
 interface ProjectsTimelineViewProps {
   trackedApps: TrackedApplication[];
+  view?: 'tracking' | 'gallery' | 'all';
   stepActionLoading?: string | null;
   onCompleteStep: (appId: string, stepId: JourneyStepId) => void | Promise<void>;
   onUndoLastStep: (appId: string) => void | Promise<void>;
@@ -54,6 +56,7 @@ function stageBadgeClass(stage: TrackedApplication['stage']): string {
 
 export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
   trackedApps,
+  view = 'all',
   stepActionLoading = null,
   onCompleteStep,
   onUndoLastStep,
@@ -96,21 +99,23 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
 
   return (
     <div className="space-y-8 animate-fadeIn">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-4 border-black pb-4 mb-2">
-        <div>
-          <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
-            Hackathon journey tracker
-          </span>
-          <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter mt-2">
-            Tracking
-          </h2>
+      {view !== 'gallery' && (
+        <>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-4 border-black pb-4 mb-2">
+          <div>
+            <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
+              Hackathon journey tracker
+            </span>
+            <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter mt-2">
+              Tracking
+            </h2>
+          </div>
+          <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-md text-center md:text-right mt-2 md:mt-0 leading-tight">
+            Complete each step in order — registered, project created, building, submitted, then results. Undo if you mark something by mistake.
+          </p>
         </div>
-        <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-md text-center md:text-right mt-2 md:mt-0 leading-tight">
-          Complete each step in order — registered, project created, building, submitted, then results. Undo if you mark something by mistake.
-        </p>
-      </div>
 
-      <div className="space-y-6">
+        <div className="space-y-6">
           {sortedApps.length === 0 ? (
             <div className="border-4 border-dashed border-zinc-300 py-24 px-6 text-center">
               <Clock className="w-10 h-10 mx-auto text-zinc-400 mb-4" />
@@ -184,7 +189,7 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
                           className="bg-zinc-100 border-2 border-black font-headline font-black text-[9px] py-2 px-3 uppercase hover:bg-[#ffcc00] cursor-pointer flex items-center gap-1"
                         >
                           <Sparkles className="w-3.5 h-3.5" />
-                          AI check
+                          AI Check
                         </button>
                         <button
                           type="button"
@@ -443,7 +448,119 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
               );
             })
           )}
-      </div>
+        </div>
+        </>
+      )}
+
+      {view !== 'tracking' && (
+      <section id="project-gallery" className="pt-10 border-t-4 border-black space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3">
+          <div>
+            <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
+              Project archive
+            </span>
+            <h2 className="font-headline font-black text-4xl md:text-5xl uppercase tracking-tighter mt-2">
+              Project Gallery
+            </h2>
+          </div>
+          <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-md md:text-right leading-tight">
+            Browse every project you are tracking across hackathons in one card grid.
+          </p>
+        </div>
+
+        {sortedApps.length === 0 ? (
+          <div className="border-4 border-dashed border-zinc-300 py-16 px-6 text-center">
+            <Flag className="w-10 h-10 mx-auto text-zinc-400 mb-4" />
+            <p className="font-headline font-black text-xl uppercase text-zinc-500 mb-2">
+              No projects yet
+            </p>
+            <p className="font-mono text-xs uppercase font-bold text-zinc-400 max-w-sm mx-auto">
+              Register for a hackathon to create your first tracked project card.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {sortedApps.map((app) => {
+              const progress = journeyProgressPercent(app);
+              const completedMilestones = app.milestones.filter((m) => m.completed).length;
+
+              return (
+                <article
+                  key={`gallery-${app.id}`}
+                  className="bg-white border-3 border-black shadow-[4px_4px_0px_0px_#101010] rounded-[6px] overflow-hidden flex flex-col"
+                >
+                  <div className="p-5 border-b-3 border-black bg-[#faf7f2] space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`font-mono text-[9px] font-black uppercase px-2 py-0.5 border-2 ${stageBadgeClass(app.stage)}`}
+                      >
+                        {stageLabel(app.stage)}
+                      </span>
+                      <span className="font-mono text-[9px] font-bold uppercase text-zinc-500">
+                        {progress}% complete
+                      </span>
+                    </div>
+                    <h3 className="font-headline font-black text-2xl uppercase tracking-tight text-[#1a1a1a] leading-none">
+                      {app.title}
+                    </h3>
+                    <p className="font-mono text-[10px] uppercase font-black text-[#0055ff]">
+                      {app.hackathonName}
+                    </p>
+                    {app.concept && (
+                      <p className="font-mono text-[10px] uppercase text-zinc-500 font-bold line-clamp-3">
+                        {app.concept}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="p-5 flex-1 flex flex-col gap-4">
+                    <div className="grid grid-cols-2 gap-2 font-mono text-[10px] uppercase font-bold text-zinc-600">
+                      <span className="flex items-center gap-1.5">
+                        <Trophy className="w-3.5 h-3.5 text-[#ffcc00]" />
+                        {app.prizePool}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5" />
+                        {formatDeadline(app.deadline)}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        {app.completedSteps.length}/{JOURNEY_STEPS.length} steps
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Flag className="w-3.5 h-3.5" />
+                        {completedMilestones}/{app.milestones.length} tasks
+                      </span>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between font-mono text-[9px] uppercase font-bold text-zinc-500 mb-1">
+                        <span>Build progress</span>
+                        <span>{progress}%</span>
+                      </div>
+                      <div className="h-2 bg-zinc-200 border-2 border-black">
+                        <div
+                          className="h-full bg-[#0055ff] transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(app.id)}
+                      className="mt-auto bg-[#ffcc00] text-black border-2 border-black px-4 py-2 font-headline font-black text-xs uppercase shadow-[2px_2px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer"
+                    >
+                      Open tracker
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+      )}
 
       {confirmStep && (
         <div
@@ -500,48 +617,11 @@ export const ProjectsTimelineView: React.FC<ProjectsTimelineViewProps> = ({
         </div>
       )}
 
-      {comingSoonOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn"
-          onClick={() => setComingSoonOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="bg-white border-4 border-black p-8 md:p-10 shadow-[6px_6px_0px_0px_#ffcc00] max-w-md w-full text-center relative animate-scaleIn"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-labelledby="ai-check-coming-soon-title"
-          >
-            <button
-              type="button"
-              onClick={() => setComingSoonOpen(false)}
-              className="absolute top-4 right-4 font-headline font-black text-sm cursor-pointer bg-transparent border-none hover:opacity-70"
-              aria-label="Close"
-            >
-              [X]
-            </button>
-            <div className="w-16 h-16 mx-auto mb-5 bg-[#ffcc00] border-4 border-black flex items-center justify-center shadow-[3px_3px_0px_0px_#1a1a1a]">
-              <Sparkles className="w-8 h-8 text-black" />
-            </div>
-            <h3
-              id="ai-check-coming-soon-title"
-              className="font-headline font-black text-2xl md:text-3xl uppercase tracking-tight text-[#1a1a1a] mb-3"
-            >
-              Coming Soon
-            </h3>
-            <p className="font-mono text-xs uppercase font-bold text-zinc-500 leading-relaxed mb-6">
-              AI project checks for your hackathon timeline are on the way.
-            </p>
-            <button
-              type="button"
-              onClick={() => setComingSoonOpen(false)}
-              className="w-full bg-black text-white border-2 border-black py-3 font-headline font-black text-xs uppercase tracking-wider hover:bg-[#ffcc00] hover:text-black cursor-pointer"
-            >
-              Got it
-            </button>
-          </div>
-        </div>
-      )}
+      <AiComingSoonModal
+        open={comingSoonOpen}
+        onClose={() => setComingSoonOpen(false)}
+        message="AI project checks for your hackathon timeline are on the way."
+      />
     </div>
   );
 };

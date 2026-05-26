@@ -46,6 +46,21 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
     [leaderboard, currentUser.id],
   );
 
+  const topLeaderboardEntries = useMemo(() => leaderboard.slice(0, 10), [leaderboard]);
+
+  const showCurrentUserPosition = Boolean(
+    yourLeaderboardEntry && !topLeaderboardEntries.some((entry) => entry.user_id === currentUser.id),
+  );
+
+  const visibleLeaderboardEntries = useMemo(
+    () => (
+      showCurrentUserPosition && yourLeaderboardEntry
+        ? [...topLeaderboardEntries, yourLeaderboardEntry]
+        : topLeaderboardEntries
+    ),
+    [showCurrentUserPosition, topLeaderboardEntries, yourLeaderboardEntry],
+  );
+
   const loadLeaderboard = useCallback(async () => {
     setLoadingBoard(true);
     setError(null);
@@ -181,7 +196,7 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
               Rankings
             </h3>
             <span className="font-mono text-[9px] uppercase font-bold text-zinc-400">
-              Top {leaderboard.length}
+              Top 10
             </span>
           </div>
 
@@ -196,19 +211,25 @@ export const DashboardLeaderboard: React.FC<DashboardLeaderboardProps> = ({
             </div>
           ) : (
             <div className="space-y-3 max-h-[720px] overflow-y-auto pr-1">
-              {leaderboard.map((entry) => {
+              {visibleLeaderboardEntries.map((entry, index) => {
                 const isYou = entry.user_id === currentUser.id;
+                const isCurrentUserPositionRow = showCurrentUserPosition && index === visibleLeaderboardEntries.length - 1;
                 const avatarUrl =
                   isYou && currentUser.avatar_url ? currentUser.avatar_url : entry.avatar_url;
                 const isTopThree = entry.rank <= 3;
 
                 return (
                   <div
-                    key={entry.user_id}
-                    className={`bg-white border-3 border-black p-4 shadow-[3px_3px_0px_0px_#101010] flex items-center gap-4 transition-all ${
+                    key={`${entry.user_id}-${isCurrentUserPositionRow ? 'current-user' : 'top'}`}
+                    className={`relative bg-white border-3 border-black p-4 shadow-[3px_3px_0px_0px_#101010] flex items-center gap-4 transition-all ${
                       isYou ? 'ring-2 ring-[#0055ff] bg-[#0055ff]/5' : ''
                     } ${isTopThree ? 'shadow-[4px_4px_0px_0px_#ffcc00]' : ''}`}
                   >
+                    {isCurrentUserPositionRow && (
+                      <div className="absolute -top-3 left-4 bg-[#0055ff] text-white border-2 border-black px-2 py-0.5 font-mono text-[8px] uppercase font-bold">
+                        Your position
+                      </div>
+                    )}
                     <div className="w-12 h-12 shrink-0 bg-[#1a1a1a] border-2 border-black flex items-center justify-center text-white">
                       {rankDisplay(entry.rank, isTopThree)}
                     </div>

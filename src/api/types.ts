@@ -28,6 +28,10 @@ export interface User {
   role: 'user' | 'admin' | 'moderator';
   interests: string[];
   avatar_url?: string | null;
+  github_username?: string | null;
+  linkedin_username?: string | null;
+  twitter_username?: string | null;
+  website?: string | null;
   created_at: string;
 }
 
@@ -148,6 +152,10 @@ export interface UserHackathonStatsApi {
     username: string;
     interests: string[];
     avatar_url?: string | null;
+    github_username?: string | null;
+    linkedin_username?: string | null;
+    twitter_username?: string | null;
+    website?: string | null;
     created_at: string;
   };
   participations: number;
@@ -161,11 +169,11 @@ export interface HackathonListParams {
   page?: number;
   page_size?: number;
   theme?: string;
-  mode?: 'online' | 'offline' | 'hybrid' | 'unknown';
+  mode?: string;
   platform?: string;
   sort?: 'deadline' | 'registrations' | 'scraped_at' | 'start_date';
   only_open?: boolean;
-  status?: 'open' | 'closed' | 'upcoming' | 'ended';
+  status?: string;
 }
 
 export interface HackathonSearchParams extends HackathonListParams {

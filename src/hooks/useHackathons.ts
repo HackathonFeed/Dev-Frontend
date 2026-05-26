@@ -12,32 +12,28 @@ import type { Hackathon } from '../types';
 import {
   DEFAULT_HACKATHON_FILTERS,
   type HackathonFilterValues,
-  type HackathonStatusFilter,
 } from '../components/HackathonFilters';
 
 function resolveThemeFilter(filters: HackathonFilterValues): string | undefined {
-  return filters.theme ?? filters.domain ?? undefined;
+  const selected = [...filters.theme, ...filters.domain];
+  return selected.length ? selected.join(',') : undefined;
 }
 
 function resolveModeFilter(filters: HackathonFilterValues) {
-  return filters.mode === 'all' ? undefined : filters.mode;
+  return filters.mode.length ? filters.mode.join(',') : undefined;
 }
 
-function resolveStatusParams(status: HackathonStatusFilter): {
+function resolveStatusParams(status: HackathonFilterValues['status']): {
   only_open?: boolean;
-  status?: 'open' | 'closed' | 'upcoming' | 'ended';
+  status?: string;
 } {
-  switch (status) {
-    case 'open':
-      return { only_open: true };
-    case 'closed':
-    case 'upcoming':
-    case 'ended':
-      return { only_open: false, status };
-    case 'all':
-    default:
-      return { only_open: false };
+  if (status.length === 1 && status[0] === 'open') {
+    return { only_open: true };
   }
+  return {
+    only_open: false,
+    status: status.length ? status.join(',') : undefined,
+  };
 }
 
 interface UseHackathonsOptions extends HackathonFilterValues {
@@ -84,7 +80,7 @@ export function useHackathons({
         page,
         page_size: pageSize,
         theme: resolveThemeFilter(filterValues),
-        platform: platform ?? undefined,
+        platform: platform.length ? platform.join(',') : undefined,
         mode: resolveModeFilter(filterValues),
         sort,
         ...statusParams,

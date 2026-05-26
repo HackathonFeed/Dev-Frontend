@@ -115,6 +115,8 @@ export const HackathonDetailModal: React.FC<HackathonDetailModalProps> = ({
 
   const mapped = data ? mapHackathonFromApi(data) : null;
   const thumbnail = normalizeThumbnail(data?.thumbnail);
+  const registrationOpen = data ? isHackathonRegistrationOpen(data) : false;
+  const eventEnded = mapped?.apiStatus === 'ended';
 
   return (
     <div
@@ -300,7 +302,7 @@ export const HackathonDetailModal: React.FC<HackathonDetailModalProps> = ({
                 {data.url && (
                   <button
                     type="button"
-                    disabled={registerLoading || isRegistered || !isHackathonRegistrationOpen(data)}
+                    disabled={registerLoading || isRegistered || !registrationOpen}
                     onClick={() =>
                       onRegister?.({
                         title: data.title,
@@ -313,7 +315,7 @@ export const HackathonDetailModal: React.FC<HackathonDetailModalProps> = ({
                     className={`inline-flex items-center gap-2 font-headline font-black text-xs uppercase px-5 py-3 border-2 border-black shadow-[3px_3px_0px_0px_#1a1a1a] transition-all disabled:cursor-default cursor-pointer ${
                       isRegistered
                         ? 'bg-[#16a34a] text-white'
-                        : !isHackathonRegistrationOpen(data)
+                        : !registrationOpen
                           ? 'bg-zinc-400 text-white'
                         : 'bg-[#0055ff] text-white hover:bg-black disabled:opacity-70 disabled:cursor-wait'
                     }`}
@@ -325,8 +327,8 @@ export const HackathonDetailModal: React.FC<HackathonDetailModalProps> = ({
                       </>
                     ) : isRegistered ? (
                       'Registered'
-                    ) : !isHackathonRegistrationOpen(data) ? (
-                      data.status === 'ended' ? 'Event Ended' : 'Registration Closed'
+                    ) : !registrationOpen ? (
+                      eventEnded ? 'Event Ended' : 'Registration Closed'
                     ) : (
                       <>
                         Register on {data.source_platform}
@@ -354,12 +356,18 @@ export const HackathonDetailModal: React.FC<HackathonDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      if (!registrationOpen) return;
                       onTrack(data.title);
                       onClose();
                     }}
-                    className="inline-flex items-center gap-2 bg-[#1a1a1a] text-white font-headline font-black text-xs uppercase px-5 py-3 border-2 border-black hover:bg-[#ffcc00] hover:text-black transition-all cursor-pointer"
+                    disabled={!registrationOpen}
+                    className={`inline-flex items-center gap-2 font-headline font-black text-xs uppercase px-5 py-3 border-2 border-black transition-all ${
+                      registrationOpen
+                        ? 'bg-[#1a1a1a] text-white hover:bg-[#ffcc00] hover:text-black cursor-pointer'
+                        : 'bg-zinc-400 text-white cursor-not-allowed'
+                    }`}
                   >
-                    Track build
+                    {eventEnded ? 'Event ended' : 'Track build'}
                   </button>
                 )}
                 {onValidate && (

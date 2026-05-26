@@ -7,11 +7,11 @@ export type HackathonModeFilter = 'all' | 'online' | 'offline' | 'hybrid' | 'unk
 
 export interface HackathonFilterValues {
   search: string;
-  theme: string | null;
-  domain: string | null;
-  platform: string | null;
-  status: HackathonStatusFilter;
-  mode: HackathonModeFilter;
+  theme: string[];
+  domain: string[];
+  platform: string[];
+  status: Exclude<HackathonStatusFilter, 'all'>[];
+  mode: Exclude<HackathonModeFilter, 'all'>[];
 }
 
 interface HackathonFiltersProps {
@@ -70,24 +70,65 @@ function FilterSelect({
   options,
 }: {
   label: string;
-  value: string;
-  onChange: (value: string) => void;
+  value: string[];
+  onChange: (value: string[]) => void;
   options: { value: string; label: string }[];
 }) {
+  const choices = options.filter((opt) => opt.value);
+  const selectedLabels = choices
+    .filter((opt) => value.includes(opt.value))
+    .map((opt) => opt.label);
+  const summary =
+    selectedLabels.length === 0
+      ? options[0]?.label ?? `All ${label}`
+      : selectedLabels.length > 2
+        ? `${selectedLabels.length} selected`
+        : selectedLabels.join(', ');
+  const toggleOption = (optionValue: string) => {
+    onChange(
+      value.includes(optionValue)
+        ? value.filter((item) => item !== optionValue)
+        : [...value, optionValue]
+    );
+  };
+
   return (
     <div className="flex flex-col gap-1 min-w-[140px] flex-1">
       <label className="font-mono text-[9px] uppercase font-bold text-zinc-500">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="bg-white border-2 border-black font-mono text-[10px] font-bold uppercase px-2 py-2 focus:outline-none cursor-pointer"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <details className="relative group">
+        <summary className="list-none bg-white border-2 border-black font-mono text-[10px] font-bold uppercase px-2 py-2 focus:outline-none cursor-pointer flex items-center justify-between gap-2">
+          <span className="truncate">{summary}</span>
+          <span className="text-xs group-open:rotate-180 transition-transform">v</span>
+        </summary>
+        <div className="absolute z-30 mt-1 w-full max-h-60 overflow-y-auto bg-white border-2 border-black shadow-[3px_3px_0px_0px_#101010] p-1 space-y-1">
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className={`w-full text-left font-mono text-[10px] font-bold uppercase px-2 py-2 border border-black cursor-pointer ${
+              value.length === 0 ? 'bg-[#ffcc00]' : 'bg-white hover:bg-zinc-100'
+            }`}
+          >
+            {options[0]?.label ?? `All ${label}`}
+          </button>
+          {choices.map((opt) => (
+            <label
+              key={opt.value}
+              className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase px-2 py-2 hover:bg-zinc-100 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={value.includes(opt.value)}
+                onChange={() => toggleOption(opt.value)}
+                className="accent-[#ffcc00]"
+              />
+              <span>{opt.label}</span>
+            </label>
+          ))}
+        </div>
+      </details>
+      <span className="font-mono text-[8px] uppercase text-zinc-400 font-bold">
+        {value.length ? `${value.length} selected` : 'All'}
+      </span>
     </div>
   );
 }
@@ -104,11 +145,15 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
 }) => {
   const hasActiveFilters =
     values.search ||
-    values.theme ||
-    values.domain ||
-    values.platform ||
-    values.status !== 'open' ||
-    values.mode !== 'all';
+    values.theme.length > 0 ||
+    values.domain.length > 0 ||
+    values.platform.length > 0 ||
+    values.status.length !== 1 ||
+    values.status[0] !== 'open' ||
+    values.mode.length > 0;
+
+  const toggleValue = <T extends string,>(items: T[], value: T): T[] =>
+    items.includes(value) ? items.filter((item) => item !== value) : [...items, value];
 
   const themeOptions = [
     { value: '', label: 'All themes' },
@@ -118,14 +163,6 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
   const domainOptions = [
     { value: '', label: 'All domains' },
     ...themes.map((t) => ({ value: t.theme, label: `${t.theme} (${t.count})` })),
-  ];
-
-  const platformOptions = [
-    { value: '', label: 'All platforms' },
-    ...platforms.map((p) => ({
-      value: p.platform,
-      label: `${p.platform} (${p.open_count} open)`,
-    })),
   ];
 
   return (
@@ -170,33 +207,25 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <FilterSelect
           label="Theme"
-          value={values.theme ?? ''}
-          onChange={(v) =>
-            onChange({ theme: v || null, domain: v ? null : values.domain })
-          }
+          value={values.theme}
+          onChange={(v) => onChange({ theme: v, domain: v.length ? [] : values.domain })}
           options={themeOptions}
         />
         <FilterSelect
           label="Domain"
-          value={values.domain ?? ''}
-          onChange={(v) =>
-            onChange({ domain: v || null, theme: v ? null : values.theme })
-          }
+          value={values.domain}
+          onChange={(v) => onChange({ domain: v, theme: v.length ? [] : values.theme })}
           options={domainOptions}
-        />
-        <FilterSelect
-          label="Platform"
-          value={values.platform ?? ''}
-          onChange={(v) => onChange({ platform: v || null })}
-          options={platformOptions}
         />
         <FilterSelect
           label="Format"
           value={values.mode}
-          onChange={(v) => onChange({ mode: v as HackathonModeFilter })}
+          onChange={(v) =>
+            onChange({ mode: v as Exclude<HackathonModeFilter, 'all'>[] })
+          }
           options={MODE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
         />
       </div>
@@ -208,8 +237,19 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
             {STATUS_OPTIONS.map((opt) => (
               <FilterChip
                 key={opt.value}
-                active={values.status === opt.value}
-                onClick={() => onChange({ status: opt.value })}
+                active={
+                  opt.value === 'all'
+                    ? values.status.length === 0
+                    : values.status.includes(opt.value)
+                }
+                onClick={() =>
+                  onChange({
+                    status:
+                      opt.value === 'all'
+                        ? []
+                        : toggleValue(values.status, opt.value),
+                  })
+                }
               >
                 {opt.label}
               </FilterChip>
@@ -222,16 +262,16 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
         <div className="space-y-2">
           <p className="font-mono text-[9px] uppercase font-bold text-zinc-500">Quick platforms</p>
           <div className="flex flex-wrap gap-1.5">
-            <FilterChip active={!values.platform} onClick={() => onChange({ platform: null })}>
+            <FilterChip active={values.platform.length === 0} onClick={() => onChange({ platform: [] })}>
               All
             </FilterChip>
-            {platforms.slice(0, 8).map((p) => (
+            {platforms.map((p) => (
               <FilterChip
                 key={p.platform}
-                active={values.platform === p.platform}
+                active={values.platform.includes(p.platform)}
                 onClick={() =>
                   onChange({
-                    platform: values.platform === p.platform ? null : p.platform,
+                    platform: toggleValue(values.platform, p.platform),
                   })
                 }
               >
@@ -247,19 +287,19 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
           <p className="font-mono text-[9px] uppercase font-bold text-zinc-500">Popular themes</p>
           <div className="flex flex-wrap gap-1.5">
             <FilterChip
-              active={!values.theme && !values.domain}
-              onClick={() => onChange({ theme: null, domain: null })}
+              active={values.theme.length === 0 && values.domain.length === 0}
+              onClick={() => onChange({ theme: [], domain: [] })}
             >
               All
             </FilterChip>
             {themes.slice(0, 10).map((t) => (
               <FilterChip
                 key={t.theme}
-                active={values.theme === t.theme || values.domain === t.theme}
+                active={values.theme.includes(t.theme) || values.domain.includes(t.theme)}
                 onClick={() =>
                   onChange({
-                    theme: values.theme === t.theme ? null : t.theme,
-                    domain: null,
+                    theme: toggleValue(values.theme, t.theme),
+                    domain: [],
                   })
                 }
               >
@@ -275,9 +315,9 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
 
 export const DEFAULT_HACKATHON_FILTERS: HackathonFilterValues = {
   search: '',
-  theme: null,
-  domain: null,
-  platform: null,
-  status: 'open',
-  mode: 'all',
+  theme: [],
+  domain: [],
+  platform: [],
+  status: ['open'],
+  mode: [],
 };

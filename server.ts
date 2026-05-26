@@ -8,7 +8,7 @@ dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
-const BACKEND_URL = process.env.BACKEND_URL ?? 'https://hackathonfeed-api.onrender.com';
+const BACKEND_URL = process.env.BACKEND_URL ?? 'http://0.0.0.0:8000';
 
 function readRawBody(req: express.Request): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -56,7 +56,10 @@ app.use('/api/v1', async (req, res) => {
           });
           return;
         }
-        requestBody = rawBody;
+        requestBody = rawBody.buffer.slice(
+          rawBody.byteOffset,
+          rawBody.byteOffset + rawBody.byteLength
+        ) as ArrayBuffer;
       } else {
         requestBody = JSON.stringify(req.body ?? {});
       }

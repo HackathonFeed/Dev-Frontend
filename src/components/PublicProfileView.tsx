@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, Copy, Loader2, Lock, Trophy } from 'lucide-react';
+import { ArrowLeft, Check, Copy, ExternalLink, Loader2, Lock, Trophy } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { getPublicProfile, buildPublicProfileUrl } from '../api/users';
 import type { User, UserHackathonStatsApi } from '../api/types';
@@ -13,11 +13,19 @@ import {
   mergeActivityMaps,
 } from '../lib/activityHeatmap';
 
+type SocialHandles = {
+  github: string;
+  linkedin: string;
+  x: string;
+  website: string;
+};
+
 interface PublicProfileViewProps {
   username: string;
   onHome: () => void;
   currentUser?: User | null;
   trackedApps?: TrackedApplication[];
+  socialHandles?: SocialHandles;
   onBackToWorkspace?: () => void;
   onOpenPrivateSettings?: () => void;
 }
@@ -48,11 +56,30 @@ function outcomeLabel(outcome: string): string {
   }
 }
 
+function normalizeSocialUrl(kind: keyof SocialHandles, value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  const handle = trimmed.replace(/^@/, '');
+  switch (kind) {
+    case 'github':
+      return `https://github.com/${handle.replace(/^github\.com\//i, '')}`;
+    case 'linkedin':
+      return `https://linkedin.com/in/${handle.replace(/^linkedin\.com\/in\//i, '')}`;
+    case 'x':
+      return `https://x.com/${handle.replace(/^(x|twitter)\.com\//i, '')}`;
+    case 'website':
+      return `https://${trimmed}`;
+  }
+}
+
 export const PublicProfileView: React.FC<PublicProfileViewProps> = ({
   username,
   onHome,
   currentUser = null,
   trackedApps = [],
+  socialHandles,
   onBackToWorkspace,
   onOpenPrivateSettings,
 }) => {
@@ -62,6 +89,32 @@ export const PublicProfileView: React.FC<PublicProfileViewProps> = ({
   const [copied, setCopied] = useState(false);
 
   const isOwner = currentUser?.username.toLowerCase() === username.toLowerCase();
+
+  const profileSocialHandles = useMemo<SocialHandles | undefined>(() => {
+    if (socialHandles) return socialHandles;
+    if (!profile?.user) return undefined;
+
+    return {
+      github: profile.user.github_username ?? '',
+      linkedin: profile.user.linkedin_username ?? '',
+      x: profile.user.twitter_username ?? '',
+      website: profile.user.website ?? '',
+    };
+  }, [profile?.user, socialHandles]);
+
+  const socialLinks = useMemo(() => {
+    if (!profileSocialHandles) return [];
+
+    return ([
+      { label: 'GitHub', kind: 'github' as const, value: profileSocialHandles.github },
+      { label: 'LinkedIn', kind: 'linkedin' as const, value: profileSocialHandles.linkedin },
+      { label: 'X / Twitter', kind: 'x' as const, value: profileSocialHandles.x },
+      { label: 'Website', kind: 'website' as const, value: profileSocialHandles.website },
+    ]).filter((item) => item.value.trim()).map((item) => ({
+      ...item,
+      href: normalizeSocialUrl(item.kind, item.value),
+    }));
+  }, [profileSocialHandles]);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,6 +230,23 @@ export const PublicProfileView: React.FC<PublicProfileViewProps> = ({
                         >
                           #{interest}
                         </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {socialLinks.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-3">
+                      {socialLinks.map((link) => (
+                        <a
+                          key={link.kind}
+                          href={link.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase font-bold px-2.5 py-1.5 border-2 border-black bg-white text-[#1a1a1a] hover:bg-[#0055ff] hover:text-white transition-colors"
+                        >
+                          {link.label}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
                       ))}
                     </div>
                   )}
