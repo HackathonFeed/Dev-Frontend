@@ -31,6 +31,14 @@ export async function login(email: string, password: string): Promise<User> {
   return establishSession(tokens);
 }
 
+export async function loginWithGoogle(accessToken: string): Promise<User> {
+  const tokens = await apiRequest<TokenPayload>('/auth/google', {
+    method: 'POST',
+    body: JSON.stringify({ access_token: accessToken }),
+  });
+  return establishSession(tokens);
+}
+
 export async function getMe(): Promise<User> {
   return apiRequest<User>('/auth/me');
 }

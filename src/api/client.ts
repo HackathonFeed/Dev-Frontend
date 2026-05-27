@@ -20,6 +20,7 @@ const TOKEN_KEYS = {
 const PUBLIC_AUTH_PATHS = new Set([
   '/auth/login',
   '/auth/register',
+  '/auth/google',
   '/auth/refresh',
 ]);
 

@@ -50,6 +50,7 @@ import {
   DEFAULT_HACKATHON_FILTERS,
   type HackathonFilterValues,
 } from './components/HackathonFilters';
+import { GoogleSignInButton } from './components/GoogleSignInButton';
 import { useAuth, ApiError } from './context/AuthContext';
 import { useHackathons } from './hooks/useHackathons';
 import { useTrackedProjects } from './hooks/useTrackedProjects';
@@ -71,6 +72,7 @@ import { DashboardLeaderboard } from './components/DashboardLeaderboard';
 import { SavedHackathonsPanel } from './components/SavedHackathonsPanel';
 import { ProfileAvatar } from './components/ProfileAvatar';
 import { ProfilePhotoSettings } from './components/ProfilePhotoSettings';
+import { OnboardingTour, shouldShowTour, queueTourForNewUser } from './components/OnboardingTour';
 
 function parsePublicProfileUsername(): string | null {
   const match = window.location.pathname.match(/^\/u\/([a-zA-Z0-9_-]{3,30})\/?$/);
@@ -242,7 +244,7 @@ function dashboardTabFromPath(pathname: string): DashboardTab {
 }
 
 export default function App() {
-  const { user, isAuthenticated, isLoading: authLoading, login, register, logout, refreshUser } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, login, loginWithGoogle, register, logout, refreshUser } = useAuth();
 
   // --- Core Routing/Tab state ---
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => activeTabFromPath(window.location.pathname));
@@ -252,6 +254,7 @@ export default function App() {
   const [pendingTab, setPendingTab] = useState<'tracker' | 'explore' | 'validator' | null>(null);
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>(() => dashboardTabFromPath(window.location.pathname));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
   const [adminNotice, setAdminNotice] = useState<string | null>(null);
 
@@ -320,6 +323,13 @@ export default function App() {
 
     applyRoute(path);
   }, [applyRoute, authLoading, isAuthenticated]);
+
+  // Show tour if user arrives authenticated with a pending tour flag (e.g. after page refresh)
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && shouldShowTour()) {
+      setShowTour(true);
+    }
+  }, [authLoading, isAuthenticated]);
 
   // Router and redirection helper functions
   const handleTrackerAccess = () => {
@@ -556,18 +566,11 @@ export default function App() {
       setInputPassword('');
       if (authMode === 'register') {
         setInputName('');
+        queueTourForNewUser();
+        setShowTour(true);
       }
 
-      if (pendingTab === 'tracker') {
-        setTrackHackathonName(pendingRegisterHack?.title ?? trackHackathonName);
-        navigateTo('/tracking');
-        setPendingRegisterHack(null);
-      } else if (pendingTab === 'explore') {
-        navigateTo('/hackathons');
-      } else {
-        navigateTo('/dashboard');
-      }
-      setPendingTab(null);
+      completeAuthRedirect();
     } catch (err) {
       const message =
         err instanceof ApiError
@@ -575,6 +578,39 @@ export default function App() {
           : err instanceof TypeError && err.message.includes('fetch')
             ? 'Cannot reach backend. Check your connection or the Render API deployment.'
             : 'Authentication failed. Check credentials and try again.';
+      setAuthError(message);
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const completeAuthRedirect = () => {
+    if (pendingTab === 'tracker') {
+      setTrackHackathonName(pendingRegisterHack?.title ?? trackHackathonName);
+      navigateTo('/tracking');
+      setPendingRegisterHack(null);
+    } else if (pendingTab === 'explore') {
+      navigateTo('/hackathons');
+    } else {
+      navigateTo('/dashboard');
+    }
+    setPendingTab(null);
+  };
+
+  const handleGoogleCredential = async (idToken: string) => {
+    setIsAuthenticating(true);
+    setAuthError(null);
+
+    try {
+      await loginWithGoogle(idToken);
+      completeAuthRedirect();
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof TypeError && err.message.includes('fetch')
+            ? 'Cannot reach backend. Check your connection or the Render API deployment.'
+            : 'Google sign-in failed. Try again or use email and password.';
       setAuthError(message);
     } finally {
       setIsAuthenticating(false);
@@ -1188,6 +1224,7 @@ export default function App() {
             {/* Navigation Lists with Offset Shadows */}
             <nav className="flex flex-col gap-3 mt-8">
               <button
+                id="tour-nav-dashboard"
                 onClick={() => navigateTo('/dashboard')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                   dashboardTab === 'dashboard'
@@ -1203,6 +1240,7 @@ export default function App() {
               </button>
 
               <button
+                id="tour-nav-hackathons"
                 onClick={() => navigateTo('/hackathons')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                   dashboardTab === 'hackathons'
@@ -1218,6 +1256,7 @@ export default function App() {
               </button>
 
               <button
+                id="tour-nav-tracking"
                 onClick={() => navigateTo('/tracking')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                   dashboardTab === 'projects'
@@ -1233,6 +1272,7 @@ export default function App() {
               </button>
 
               <button
+                id="tour-nav-gallery"
                 onClick={() => navigateTo('/project-gallery')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                   dashboardTab === 'gallery'
@@ -1248,6 +1288,7 @@ export default function App() {
               </button>
 
               <button
+                id="tour-nav-validate"
                 onClick={() => navigateTo('/ai-validate')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                   dashboardTab === 'team'
@@ -1266,7 +1307,8 @@ export default function App() {
           </div>
 
           <div className="mt-8 space-y-4">
-            <button 
+            <button
+              id="tour-nav-settings"
               onClick={() => navigateTo('/settings')}
               className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                 dashboardTab === 'settings'
@@ -1849,6 +1891,9 @@ export default function App() {
 
       </div>
       {hackathonDetailModal}
+      {showTour && (
+        <OnboardingTour onComplete={() => setShowTour(false)} />
+      )}
       </>
     );
   }
@@ -3530,6 +3575,22 @@ export default function App() {
                   </button>
 
                 </form>
+
+                <div className="relative my-8 text-center select-none">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-zinc-200"></div>
+                  </div>
+                  <span className="relative px-3 bg-white text-zinc-400 font-mono text-[10px] font-bold uppercase tracking-wider">
+                    OR ACCESS VIA
+                  </span>
+                </div>
+
+                <GoogleSignInButton
+                  disabled={isAuthenticating}
+                  onCredential={handleGoogleCredential}
+                  onError={(message) => setAuthError(message)}
+                  className="w-full border-3 border-black p-3.5 flex items-center justify-center gap-3 bg-white text-[#1a1a1a] font-headline font-black text-xs uppercase hover:bg-zinc-50 active:translate-y-[2px] transition-all cursor-pointer select-none disabled:opacity-50"
+                />
               </div>
 
             </div>

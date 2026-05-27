@@ -9,6 +9,7 @@ import React, {
 import {
   getMe,
   login as apiLogin,
+  loginWithGoogle as apiLoginWithGoogle,
   logout as apiLogout,
   register as apiRegister,
   tokenStorage,
@@ -21,6 +22,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -75,6 +77,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(profile);
   }, []);
 
+  const loginWithGoogle = useCallback(async (idToken: string) => {
+    const profile = await apiLoginWithGoogle(idToken);
+    setUser(profile);
+  }, []);
+
   const register = useCallback(
     async (name: string, email: string, password: string) => {
       const profile = await apiRegister(name, email, password);
@@ -94,11 +101,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: !!user,
       isLoading,
       login,
+      loginWithGoogle,
       register,
       logout,
       refreshUser,
     }),
-    [user, isLoading, login, register, logout, refreshUser]
+    [user, isLoading, login, loginWithGoogle, register, logout, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
