@@ -2,6 +2,7 @@ export * from './types';
 export * from './client';
 export * from './auth';
 export * from './hackathons';
+export * from './projects';
 export * from './bookmarks';
 export * from './trackedProjects';
 export * from './users';

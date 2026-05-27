@@ -42,6 +42,7 @@ import { VALIDATION_TAGLINES } from './data';
 import { CircuitBoardIllustration } from './components/CircuitBoardIllustration';
 import { PublicProfileView } from './components/PublicProfileView';
 import { ProjectsTimelineView } from './components/ProjectsTimelineView';
+import { ProjectsView } from './components/ProjectsView';
 import { AiComingSoonModal } from './components/AiComingSoonModal';
 import { HackathonDetailModal } from './components/HackathonDetailModal';
 import { HackathonStatusBadge } from './components/HackathonStatusBadge';
@@ -73,6 +74,7 @@ import { SavedHackathonsPanel } from './components/SavedHackathonsPanel';
 import { ProfileAvatar } from './components/ProfileAvatar';
 import { ProfilePhotoSettings } from './components/ProfilePhotoSettings';
 import { OnboardingTour, shouldShowTour, queueTourForNewUser } from './components/OnboardingTour';
+import { OnboardingProfileSetup, shouldShowProfileSetup, queueProfileSetup } from './components/OnboardingProfileSetup';
 
 function parsePublicProfileUsername(): string | null {
   const match = window.location.pathname.match(/^\/u\/([a-zA-Z0-9_-]{3,30})\/?$/);
@@ -199,7 +201,7 @@ function isEndedHackathon(hack: Partial<RegisterHackathonPayload> | undefined): 
 
 type ActiveTab = 'landing' | 'explore' | 'tracker' | 'validator' | 'auth';
 type AuthMode = 'login' | 'register';
-type DashboardTab = 'dashboard' | 'hackathons' | 'projects' | 'gallery' | 'team' | 'settings' | 'profile';
+type DashboardTab = 'dashboard' | 'hackathons' | 'projects' | 'showcase' | 'team' | 'settings' | 'profile';
 
 const PROTECTED_PATHS = new Set([
   '/explore',
@@ -209,7 +211,7 @@ const PROTECTED_PATHS = new Set([
   '/dashboard',
   '/hackathons',
   '/tracking',
-  '/project-gallery',
+  '/projects',
   '/settings',
   '/profile',
 ]);
@@ -229,8 +231,8 @@ function dashboardTabFromPath(pathname: string): DashboardTab {
       return 'hackathons';
     case '/tracking':
       return 'projects';
-    case '/project-gallery':
-      return 'gallery';
+    case '/projects':
+      return 'showcase';
     case '/ai-validate':
       return 'team';
     case '/settings':
@@ -255,6 +257,7 @@ export default function App() {
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>(() => dashboardTabFromPath(window.location.pathname));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [showProfileSetup, setShowProfileSetup] = useState(false);
 
   const [adminNotice, setAdminNotice] = useState<string | null>(null);
 
@@ -324,10 +327,14 @@ export default function App() {
     applyRoute(path);
   }, [applyRoute, authLoading, isAuthenticated]);
 
-  // Show tour if user arrives authenticated with a pending tour flag (e.g. after page refresh)
+  // After auth loads, show profile setup for new users; fall back to tour if setup already done
   useEffect(() => {
-    if (!authLoading && isAuthenticated && shouldShowTour()) {
-      setShowTour(true);
+    if (!authLoading && isAuthenticated) {
+      if (shouldShowProfileSetup()) {
+        setShowProfileSetup(true);
+      } else if (shouldShowTour()) {
+        setShowTour(true);
+      }
     }
   }, [authLoading, isAuthenticated]);
 
@@ -566,8 +573,9 @@ export default function App() {
       setInputPassword('');
       if (authMode === 'register') {
         setInputName('');
+        queueProfileSetup();
         queueTourForNewUser();
-        setShowTour(true);
+        setShowProfileSetup(true);
       }
 
       completeAuthRedirect();
@@ -1100,8 +1108,8 @@ export default function App() {
     const mobileNavItems = [
       { label: 'Dashboard', path: '/dashboard', tab: 'dashboard' as const, icon: <LayoutGrid className="w-4 h-4 shrink-0" strokeWidth={3} /> },
       { label: 'Hackathons', path: '/hackathons', tab: 'hackathons' as const, icon: <Trophy className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+      { label: 'Projects', path: '/projects', tab: 'showcase' as const, icon: <Layers className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
       { label: 'Tracking', path: '/tracking', tab: 'projects' as const, icon: <CheckSquare className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
-      { label: 'Gallery', path: '/project-gallery', tab: 'gallery' as const, icon: <Layers className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
       { label: 'AI Validate', path: '/ai-validate', tab: 'team' as const, icon: <Sparkles className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
       { label: 'Settings', path: '/settings', tab: 'settings' as const, icon: <Settings className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
     ];
@@ -1256,6 +1264,22 @@ export default function App() {
               </button>
 
               <button
+                id="tour-nav-projects"
+                onClick={() => navigateTo('/projects')}
+                className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
+                  dashboardTab === 'showcase'
+                    ? 'bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]'
+                    : 'bg-white border-black text-primary hover:bg-[#ffcc00]/10 hover:translate-y-[-2px] active:translate-y-0 shadow-[3px_3px_0px_0px_#1a1a1a]'
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <Layers className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+                  PROJECTS
+                </span>
+                <span className="text-[10px] opacity-30 select-none">»</span>
+              </button>
+
+              <button
                 id="tour-nav-tracking"
                 onClick={() => navigateTo('/tracking')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
@@ -1267,22 +1291,6 @@ export default function App() {
                 <span className="flex items-center gap-3">
                   <CheckSquare className="w-4 h-4 shrink-0" strokeWidth={2.5} />
                   TRACKING
-                </span>
-                <span className="text-[10px] opacity-30 select-none">»</span>
-              </button>
-
-              <button
-                id="tour-nav-gallery"
-                onClick={() => navigateTo('/project-gallery')}
-                className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
-                  dashboardTab === 'gallery'
-                    ? 'bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]'
-                    : 'bg-white border-black text-primary hover:bg-[#ffcc00]/10 hover:translate-y-[-2px] active:translate-y-0 shadow-[3px_3px_0px_0px_#1a1a1a]'
-                }`}
-              >
-                <span className="flex items-center gap-3">
-                  <Layers className="w-4 h-4 shrink-0" strokeWidth={2.5} />
-                  PROJECT GALLERY
                 </span>
                 <span className="text-[10px] opacity-30 select-none">»</span>
               </button>
@@ -1528,16 +1536,13 @@ export default function App() {
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>
                           )}
-                          {renderRegisterButton(
-                            {
-                              title: hack.title,
-                              id: hack.id,
-                              prizePool: hack.prizePool,
-                              deadline: hack.deadline,
-                              url: hack.url,
-                            },
-                            'flex-1 sm:flex-none bg-[#0055ff] text-white font-headline font-black text-xs uppercase px-4 py-2 border-2 border-black shadow-[2px_2px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-all cursor-pointer',
-                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setSelectedHackathonId(hack.id); }}
+                            className="flex-1 sm:flex-none bg-[#0055ff] text-white font-headline font-black text-xs uppercase px-4 py-2 border-2 border-black shadow-[2px_2px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-all cursor-pointer"
+                          >
+                            READ MORE
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1549,7 +1554,14 @@ export default function App() {
             </div>
           )}
 
-          {/* 
+          {/*
+            --------------------------------------------------------
+            SUB-TAB: PROJECTS SHOWCASE (Devfolio submissions)
+            --------------------------------------------------------
+          */}
+          {dashboardTab === 'showcase' && <ProjectsView />}
+
+          {/*
             --------------------------------------------------------
             SUB-TAB: PROJECTS / APPLICATION KANBAN TRACKER
             --------------------------------------------------------
@@ -1568,33 +1580,6 @@ export default function App() {
             />
           )}
 
-          {dashboardTab === 'gallery' && (
-            <div className="space-y-8 animate-fadeIn">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b-4 border-black pb-4 mb-8 gap-4">
-                <div>
-                  <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
-                    Project archive
-                  </span>
-                  <h2 className="font-headline font-black text-3xl sm:text-4xl md:text-5xl uppercase tracking-tighter mt-2">
-                    Project Gallery
-                  </h2>
-                </div>
-                <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-sm sm:text-right leading-tight">
-                  A dedicated showcase for shipped hackathon projects is on the way.
-                </p>
-              </div>
-
-              <div className="bg-white border-4 border-black p-6 sm:p-10 md:p-16 shadow-[6px_6px_0px_0px_#ffcc00] text-center max-w-xl mx-auto">
-                <Layers className="w-12 h-12 mx-auto text-[#0055ff] mb-4" strokeWidth={2.5} />
-                <h3 className="font-headline font-black text-3xl uppercase tracking-tight mb-3">
-                  Coming soon
-                </h3>
-                <p className="font-mono text-xs uppercase font-bold text-zinc-500">
-                  Project Gallery is being built. Use Tracking for now to manage active projects.
-                </p>
-              </div>
-            </div>
-          )}
 
           {/* 
             --------------------------------------------------------
@@ -1893,6 +1878,19 @@ export default function App() {
       {hackathonDetailModal}
       {showTour && (
         <OnboardingTour onComplete={() => setShowTour(false)} />
+      )}
+      {showProfileSetup && user && (
+        <OnboardingProfileSetup
+          user={user}
+          onComplete={async (updatedUser) => {
+            setShowProfileSetup(false);
+            // Sync latest user data then trigger the tour
+            await refreshUser();
+            if (shouldShowTour()) {
+              setShowTour(true);
+            }
+          }}
+        />
       )}
       </>
     );
@@ -2993,20 +2991,14 @@ export default function App() {
                             AI Plan
                           </button>
 
-                          {renderRegisterButton(
-                            {
-                              title: hack.title,
-                              id: hack.id,
-                              prizePool: hack.prizePool,
-                              deadline: hack.deadline,
-                              url: hack.url,
-                            },
-                            'bg-[#0055ff] text-white border-2 border-primary p-2 text-xs font-headline font-black uppercase tracking-tight flex items-center gap-1 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-[2px_2px_0px_0px_#1a1a1a]',
-                            <>
-                              Register
-                              <ArrowUpRight className="w-3.5 h-3.5" />
-                            </>,
-                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setSelectedHackathonId(hack.id); }}
+                            className="bg-[#0055ff] text-white border-2 border-primary p-2 text-xs font-headline font-black uppercase tracking-tight flex items-center gap-1 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-[2px_2px_0px_0px_#1a1a1a]"
+                          >
+                            Read More
+                            <ArrowUpRight className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
 

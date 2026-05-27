@@ -165,6 +165,63 @@ export interface UserHackathonStatsApi {
   activity?: { date: string; count: number }[];
 }
 
+export interface ProjectMemberApi {
+  username: string;
+  full_name?: string | null;
+  profile_image?: string | null;
+}
+
+export interface ProjectDescriptionSectionApi {
+  title: string;
+  content: string;
+}
+
+export interface ProjectApi {
+  id: string;
+  title: string;
+  tagline: string | null;
+  url: string;
+  thumbnail: string | null;
+  description: string | null;
+  description_sections: ProjectDescriptionSectionApi[];
+  hackathon_name: string | null;
+  hackathon_url: string | null;
+  team_members: ProjectMemberApi[];
+  technologies: string[];
+  tags: string[];
+  platforms: string[];
+  likes_count: number | null;
+  views: number | null;
+  github_url: string | null;
+  demo_url: string | null;
+  prize: string | null;
+  prize_description: string | null;
+  is_winner: boolean;
+  source_platform: string;
+  scraped_at: string | null;
+}
+
+export interface ProjectListParams {
+  page?: number;
+  page_size?: number;
+  search?: string;
+  hackathon?: string;
+  technology?: string;
+  platform?: string;
+  is_winner?: boolean;
+  sort?: 'likes' | 'views' | 'recent';
+}
+
+export interface ProjectPlatformStats {
+  platform: string;
+  count: number;
+}
+
+export interface ProjectTechnologyStats {
+  technology: string;
+  count: number;
+}
+
 export interface HackathonListParams {
   page?: number;
   page_size?: number;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { X, ArrowRight, LayoutGrid, Trophy, CheckSquare, Layers, Sparkles, Settings, Zap } from 'lucide-react';
+import { X, ArrowRight, LayoutGrid, Trophy, CheckSquare, Sparkles, Settings, Zap } from 'lucide-react';
 
 interface TourStep {
   title: string;
@@ -36,13 +36,6 @@ const TOUR_STEPS: TourStep[] = [
     elementId: 'tour-nav-tracking',
     tooltipSide: 'right',
     icon: <CheckSquare className="w-5 h-5" />,
-  },
-  {
-    title: 'Project Gallery',
-    description: 'Your personal showcase of all past and ongoing hackathon projects — a living portfolio of your builder journey.',
-    elementId: 'tour-nav-gallery',
-    tooltipSide: 'right',
-    icon: <Layers className="w-5 h-5" />,
   },
   {
     title: 'AI Idea Validator',
