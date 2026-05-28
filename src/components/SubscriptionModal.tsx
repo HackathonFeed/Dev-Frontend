@@ -331,7 +331,7 @@ export function SubscriptionModal({
                         </h3>
                       </div>
                       <span className={`font-mono text-[9px] font-black uppercase px-2 py-1 border-2 border-black ${styles.priceBadge}`}>
-                        {isFree ? 'FREE' : `₹${plan.price_inr}/mo`}
+                        {isFree ? 'FREE' : plan.key === 'champion' ? `₹${plan.price_inr} LIFETIME` : `₹${plan.price_inr}`}
                       </span>
                     </div>
 
@@ -393,7 +393,9 @@ export function SubscriptionModal({
                       ) : (
                         <>
                           <IndianRupee className="w-3.5 h-3.5" strokeWidth={3} />
-                          PAY ₹{plan.price_inr} · UPGRADE
+                          {plan.key === 'champion'
+                            ? `PAY ₹${plan.price_inr} · LIFETIME`
+                            : `PAY ₹${plan.price_inr} · GET 200 CREDITS`}
                         </>
                       )}
                     </button>

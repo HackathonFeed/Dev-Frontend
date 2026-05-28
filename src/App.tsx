@@ -515,13 +515,6 @@ export default function App() {
     navigateTo('/dashboard');
   }, [navigateTo]);
 
-  useEffect(() => {
-    if (publicProfileUsername && user?.username && publicProfileUsername !== user.username) {
-      window.history.replaceState({}, '', `/u/${user.username}`);
-      setPublicProfileUsername(user.username);
-    }
-  }, [publicProfileUsername, user?.username]);
-
   const loadBookmarks = useCallback(async () => {
     if (!isAuthenticated) {
       setBookmarkIds(new Set());
@@ -1393,7 +1386,7 @@ export default function App() {
                       style={{
                         width: subscriptionStatus.ai_points === -1
                           ? '100%'
-                          : `${Math.min(100, (subscriptionStatus.ai_points / (subscriptionStatus.plan === 'builder' ? 500 : 50)) * 100)}%`
+                          : `${Math.min(100, (subscriptionStatus.ai_points / (subscriptionStatus.plan === 'builder' ? 200 : 50)) * 100)}%`
                       }}
                     />
                   </div>

@@ -1,0 +1,22 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#EEE9E0"/>
+  <rect x="52" y="52" width="1096" height="526" fill="#FFCC00" stroke="#1A1A1A" stroke-width="12"/>
+  <rect x="88" y="92" width="1024" height="446" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="8"/>
+  <rect x="118" y="122" width="74" height="74" fill="#E63B2E" stroke="#1A1A1A" stroke-width="6"/>
+  <text x="218" y="178" fill="#1A1A1A" font-family="Arial Black, Arial, sans-serif" font-size="52" font-weight="900" letter-spacing="-2">
+    HACKATHONFEED
+  </text>
+  <text x="118" y="304" fill="#1A1A1A" font-family="Arial Black, Arial, sans-serif" font-size="72" font-weight="900" letter-spacing="-3">
+    DISCOVER. TRACK.
+  </text>
+  <text x="118" y="390" fill="#0055FF" font-family="Arial Black, Arial, sans-serif" font-size="72" font-weight="900" letter-spacing="-3">
+    WIN HACKATHONS.
+  </text>
+  <text x="122" y="472" fill="#1A1A1A" font-family="Courier New, monospace" font-size="26" font-weight="700">
+    Find hackathons, explore winning projects, and plan with AI.
+  </text>
+  <rect x="804" y="122" width="278" height="84" fill="#0055FF" stroke="#1A1A1A" stroke-width="6"/>
+  <text x="842" y="176" fill="#FFFFFF" font-family="Arial Black, Arial, sans-serif" font-size="30" font-weight="900">
+    AI COPILOT
+  </text>
+</svg>

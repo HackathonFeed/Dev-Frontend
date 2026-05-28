@@ -116,6 +116,13 @@ export function ProjectsView({ currentUserId, subscriptionStatus, onUpgradeClick
     if (subscriptionStatus.ai_points === -1) return -1;
     return Math.floor(subscriptionStatus.ai_points / PROJECT_VIEW_COST);
   })();
+  const projectAccessExhausted =
+    subscriptionStatus !== null &&
+    subscriptionStatus.ai_points !== -1 &&
+    subscriptionStatus.ai_points < PROJECT_VIEW_COST;
+  const projectsToShow = projectAccessExhausted
+    ? projects.filter((project) => unlockedProjectIds.has(project.id))
+    : projects;
 
   const openProject = async (project: ProjectApi) => {
     if (unlockingProjectId) return;
@@ -294,84 +301,111 @@ export function ProjectsView({ currentUserId, subscriptionStatus, onUpgradeClick
         )}
       </div>
 
-      {/* ── Filters ─────────────────────────────────────────────────── */}
-      <div className="sm:hidden bg-white border-2 border-black p-2.5 shadow-[2px_2px_0px_0px_#1a1a1a]">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Filter className="w-3.5 h-3.5 shrink-0" />
-            <div className="min-w-0">
-              <p className="font-headline font-black text-xs uppercase">Project filters</p>
-              <p className="font-mono text-[9px] uppercase text-zinc-500 font-bold">
-                {total.toLocaleString()} projects
-              </p>
-            </div>
+      {projectAccessExhausted && (
+        <div className="border-4 border-black bg-white p-8 sm:p-10 text-center shadow-[6px_6px_0px_0px_#e63b2e]">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center border-3 border-black bg-[#e63b2e] text-white shadow-[3px_3px_0px_0px_#1a1a1a]">
+            <Lock className="w-8 h-8" strokeWidth={3} />
           </div>
+          <p className="font-headline font-black text-3xl uppercase tracking-tight text-[#1a1a1a]">
+            Project access locked
+          </p>
+          <p className="mx-auto mt-3 max-w-xl font-mono text-xs uppercase font-bold text-zinc-500 leading-6">
+            You need {PROJECT_VIEW_COST} points to browse and unlock projects. Upgrade your plan to continue exploring the project database.
+          </p>
           <button
             type="button"
-            onClick={() => setMobileFiltersOpen(true)}
-            className="bg-[#ffcc00] border-2 border-black px-3 py-1.5 font-headline font-black text-[9px] uppercase shadow-[2px_2px_0px_0px_#101010]"
+            onClick={onUpgradeClick}
+            className="mt-6 inline-flex items-center justify-center gap-2 bg-[#0055ff] text-white border-2 border-black px-6 py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#1a1a1a] hover:bg-black hover:text-[#ffcc00] cursor-pointer transition-all"
           >
-            Open filters
+            <Zap className="w-4 h-4" strokeWidth={3} />
+            Upgrade plan
           </button>
         </div>
-        {hasActiveFilters && (
-          <div className="flex items-center justify-between gap-2 border-t-2 border-black mt-2 pt-2">
-            <span className="font-mono text-[9px] uppercase font-bold text-zinc-500">
-              Filters active
-            </span>
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="inline-flex items-center gap-1 font-mono text-[10px] uppercase font-bold text-[#e63b2e] bg-transparent border-none"
-            >
-              <X className="w-3 h-3" />
-              Clear
-            </button>
-          </div>
-        )}
-      </div>
+      )}
 
-      <div className="hidden sm:block bg-white border-3 border-black p-4 sm:p-6 shadow-[4px_4px_0px_0px_#1a1a1a] space-y-4">
-        {filterControls}
-      </div>
-
-      {mobileFiltersOpen && (
-        <div
-          className="sm:hidden fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm p-3 flex items-end"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setMobileFiltersOpen(false)}
-        >
-          <div
-            className="w-full max-h-[76vh] overflow-y-auto bg-white border-3 border-black p-3 shadow-[4px_4px_0px_0px_#ffcc00] space-y-3 animate-fadeIn"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3 border-b-2 border-black pb-2">
-              <div>
-                <p className="font-headline font-black text-base uppercase">Project filters</p>
-                <p className="font-mono text-[9px] uppercase text-zinc-500 font-bold">
-                  {total.toLocaleString()} projects
-                </p>
+      {!projectAccessExhausted && (
+        <>
+          {/* ── Filters ─────────────────────────────────────────────────── */}
+          <div className="sm:hidden bg-white border-2 border-black p-2.5 shadow-[2px_2px_0px_0px_#1a1a1a]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Filter className="w-3.5 h-3.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-headline font-black text-xs uppercase">Project filters</p>
+                  <p className="font-mono text-[9px] uppercase text-zinc-500 font-bold">
+                    {total.toLocaleString()} projects
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setMobileFiltersOpen(false)}
-                className="bg-black text-white border-2 border-black w-8 h-8 font-headline font-black text-lg"
-                aria-label="Close project filters"
+                onClick={() => setMobileFiltersOpen(true)}
+                className="bg-[#ffcc00] border-2 border-black px-3 py-1.5 font-headline font-black text-[9px] uppercase shadow-[2px_2px_0px_0px_#101010]"
               >
-                ×
+                Open filters
               </button>
             </div>
-            {filterControls}
-            <button
-              type="button"
-              onClick={() => setMobileFiltersOpen(false)}
-              className="w-full bg-[#ffcc00] border-2 border-black py-2 font-headline font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_#101010]"
-            >
-              Show projects
-            </button>
+            {hasActiveFilters && (
+              <div className="flex items-center justify-between gap-2 border-t-2 border-black mt-2 pt-2">
+                <span className="font-mono text-[9px] uppercase font-bold text-zinc-500">
+                  Filters active
+                </span>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-1 font-mono text-[10px] uppercase font-bold text-[#e63b2e] bg-transparent border-none"
+                >
+                  <X className="w-3 h-3" />
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
-        </div>
+
+          <div className="hidden sm:block bg-white border-3 border-black p-4 sm:p-6 shadow-[4px_4px_0px_0px_#1a1a1a] space-y-4">
+            {filterControls}
+          </div>
+
+          {mobileFiltersOpen && (
+            <div
+              className="sm:hidden fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm p-3 flex items-end"
+              role="dialog"
+              aria-modal="true"
+              onClick={() => setMobileFiltersOpen(false)}
+            >
+              <div
+                className="w-full max-h-[76vh] overflow-y-auto bg-white border-3 border-black p-3 shadow-[4px_4px_0px_0px_#ffcc00] space-y-3 animate-fadeIn"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-center justify-between gap-3 border-b-2 border-black pb-2">
+                  <div>
+                    <p className="font-headline font-black text-base uppercase">Project filters</p>
+                    <p className="font-mono text-[9px] uppercase text-zinc-500 font-bold">
+                      {total.toLocaleString()} projects
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMobileFiltersOpen(false)}
+                    className="bg-black text-white border-2 border-black w-8 h-8 font-headline font-black text-lg"
+                    aria-label="Close project filters"
+                  >
+                    ×
+                  </button>
+                </div>
+                {filterControls}
+                <button
+                  type="button"
+                  onClick={() => setMobileFiltersOpen(false)}
+                  className="w-full bg-[#ffcc00] border-2 border-black py-2 font-headline font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_#101010]"
+                >
+                  Show projects
+                </button>
+              </div>
+            </div>
+          )}
+
+        </>
       )}
 
       {/* ── Content ─────────────────────────────────────────────────── */}
@@ -397,10 +431,19 @@ export function ProjectsView({ currentUserId, subscriptionStatus, onUpgradeClick
             Clear filters
           </button>
         </div>
+      ) : projectAccessExhausted && projectsToShow.length === 0 ? (
+        <div className="border-4 border-dashed border-zinc-300 py-16 text-center font-mono uppercase text-sm font-bold text-zinc-400">
+          No unlocked projects on this page. Upgrade to unlock more projects.
+        </div>
       ) : (
         <div className="space-y-6">
+          {projectAccessExhausted && (
+            <p className="font-mono text-[10px] uppercase font-bold text-zinc-500">
+              Showing your already unlocked projects. Upgrade to unlock new projects.
+            </p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-            {projects.map((project, idx) => (
+            {projectsToShow.map((project, idx) => (
               <ProjectCard
                 key={project.id}
                 project={project}
@@ -411,12 +454,10 @@ export function ProjectsView({ currentUserId, subscriptionStatus, onUpgradeClick
               />
             ))}
           </div>
-
         </div>
       )}
 
-      {/* ── Pagination ──────────────────────────────────────────────── */}
-      {pages > 1 && (
+      {!projectAccessExhausted && pages > 1 && (
         <div className="flex items-center justify-center gap-4 mt-8 font-mono text-xs font-bold uppercase">
           <button
             type="button"

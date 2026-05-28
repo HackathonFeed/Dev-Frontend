@@ -1,0 +1,16 @@
+{
+  "name": "HackathonFeed",
+  "short_name": "HackathonFeed",
+  "description": "Discover, track, and win hackathons with project inspiration and AI guidance.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eee9e0",
+  "theme_color": "#ffcc00",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
