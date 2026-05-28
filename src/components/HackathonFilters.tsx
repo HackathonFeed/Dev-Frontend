@@ -54,7 +54,7 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`font-mono text-[10px] font-bold px-2.5 py-1.5 border-2 border-black uppercase transition-all cursor-pointer ${
+      className={`font-mono text-[9px] sm:text-[10px] font-bold px-2 py-1 sm:px-2.5 sm:py-1.5 border-2 border-black uppercase transition-all cursor-pointer ${
         active ? 'bg-[#ffcc00] text-black' : 'bg-white hover:bg-zinc-100 text-black'
       }`}
     >
@@ -93,18 +93,18 @@ function FilterSelect({
   };
 
   return (
-    <div className="flex flex-col gap-1 min-w-0 flex-1">
+    <div className="flex flex-col gap-0.5 sm:gap-1 min-w-0 flex-1">
       <label className="font-mono text-[9px] uppercase font-bold text-zinc-500">{label}</label>
       <details className="relative group">
-        <summary className="list-none bg-white border-2 border-black font-mono text-[10px] font-bold uppercase px-2 py-2 focus:outline-none cursor-pointer flex items-center justify-between gap-2 min-w-0">
+        <summary className="list-none bg-white border-2 border-black font-mono text-[9px] sm:text-[10px] font-bold uppercase px-2 py-1.5 sm:py-2 focus:outline-none cursor-pointer flex items-center justify-between gap-2 min-w-0">
           <span className="truncate">{summary}</span>
           <span className="text-xs group-open:rotate-180 transition-transform">v</span>
         </summary>
-        <div className="absolute z-30 mt-1 w-full min-w-[220px] max-h-60 overflow-y-auto bg-white border-2 border-black shadow-[3px_3px_0px_0px_#101010] p-1 space-y-1">
+        <div className="absolute z-30 mt-1 w-full min-w-[220px] max-h-48 sm:max-h-60 overflow-y-auto bg-white border-2 border-black shadow-[3px_3px_0px_0px_#101010] p-1 space-y-1">
           <button
             type="button"
             onClick={() => onChange([])}
-            className={`w-full text-left font-mono text-[10px] font-bold uppercase px-2 py-2 border border-black cursor-pointer ${
+            className={`w-full text-left font-mono text-[9px] sm:text-[10px] font-bold uppercase px-2 py-1.5 sm:py-2 border border-black cursor-pointer ${
               value.length === 0 ? 'bg-[#ffcc00]' : 'bg-white hover:bg-zinc-100'
             }`}
           >
@@ -113,7 +113,7 @@ function FilterSelect({
           {choices.map((opt) => (
             <label
               key={opt.value}
-              className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase px-2 py-2 hover:bg-zinc-100 cursor-pointer"
+              className="flex items-center gap-2 font-mono text-[9px] sm:text-[10px] font-bold uppercase px-2 py-1.5 sm:py-2 hover:bg-zinc-100 cursor-pointer"
             >
               <input
                 type="checkbox"
@@ -168,7 +168,7 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
 
   const filterContent = (
     <>
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <Filter className="w-4 h-4 shrink-0" />
           <span className="font-headline font-black text-sm uppercase">Filters</span>
@@ -188,12 +188,12 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
         )}
       </div>
 
-      <div className="bg-zinc-50 border-2 border-black p-1.5 flex items-center gap-2">
-        <Search className="w-4 h-4 text-zinc-500 shrink-0 ml-1" />
+      <div className="bg-zinc-50 border-2 border-black p-1 sm:p-1.5 flex items-center gap-2">
+        <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-500 shrink-0 ml-1" />
         <input
           type="text"
           placeholder="Search hackathons..."
-          className="w-full bg-transparent border-none text-[10px] md:text-xs font-bold uppercase focus:outline-none placeholder:text-zinc-400 py-1"
+          className="w-full bg-transparent border-none text-[9px] sm:text-[10px] md:text-xs font-bold uppercase focus:outline-none placeholder:text-zinc-400 py-0.5 sm:py-1"
           value={values.search}
           onChange={(e) => onChange({ search: e.target.value })}
         />
@@ -208,7 +208,7 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-3">
         <FilterSelect
           label="Theme"
           value={values.theme}
@@ -232,9 +232,9 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
       </div>
 
       {!compact && (
-        <div className="space-y-2">
+        <div className="space-y-1.5 sm:space-y-2">
           <p className="font-mono text-[9px] uppercase font-bold text-zinc-500">Status</p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1 sm:gap-1.5">
             {STATUS_OPTIONS.map((opt) => (
               <FilterChip
                 key={opt.value}
@@ -260,7 +260,7 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
       )}
 
       {!compact && platforms.length > 0 && (
-        <div className="space-y-2">
+        <div className="hidden sm:block space-y-2">
           <p className="font-mono text-[9px] uppercase font-bold text-zinc-500">Quick platforms</p>
           <div className="flex flex-wrap gap-1.5">
             <FilterChip active={values.platform.length === 0} onClick={() => onChange({ platform: [] })}>
@@ -284,7 +284,7 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
       )}
 
       {!compact && themes.length > 0 && (
-        <div className="space-y-2">
+        <div className="hidden sm:block space-y-2">
           <p className="font-mono text-[9px] uppercase font-bold text-zinc-500">Popular themes</p>
           <div className="flex flex-wrap gap-1.5">
             <FilterChip
@@ -315,12 +315,12 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
 
   return (
     <>
-      <div className="sm:hidden bg-white border-3 border-black p-3 shadow-[3px_3px_0px_0px_#101010] space-y-3">
+      <div className="sm:hidden bg-white border-2 border-black p-2.5 shadow-[2px_2px_0px_0px_#101010] space-y-2">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <Filter className="w-4 h-4 shrink-0" />
+            <Filter className="w-3.5 h-3.5 shrink-0" />
             <div className="min-w-0">
-              <p className="font-headline font-black text-sm uppercase">Filters</p>
+              <p className="font-headline font-black text-xs uppercase">Filters</p>
               <p className="font-mono text-[9px] uppercase text-zinc-500 font-bold">
                 {loading ? 'Loading...' : `${total.toLocaleString()} results`}
               </p>
@@ -329,7 +329,7 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
           <button
             type="button"
             onClick={() => setMobileFiltersOpen(true)}
-            className="bg-[#ffcc00] border-2 border-black px-4 py-2 font-headline font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_#101010]"
+            className="bg-[#ffcc00] border-2 border-black px-3 py-1.5 font-headline font-black text-[9px] uppercase shadow-[2px_2px_0px_0px_#101010]"
           >
             Open filters
           </button>
@@ -357,18 +357,18 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
 
       {mobileFiltersOpen && (
         <div
-          className="sm:hidden fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm p-4 flex items-end"
+          className="sm:hidden fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm p-3 flex items-end"
           role="dialog"
           aria-modal="true"
           onClick={() => setMobileFiltersOpen(false)}
         >
           <div
-            className="w-full max-h-[88vh] overflow-y-auto bg-white border-4 border-black p-4 shadow-[6px_6px_0px_0px_#ffcc00] space-y-4 animate-fadeIn"
+            className="w-full max-h-[76vh] overflow-y-auto bg-white border-3 border-black p-3 shadow-[4px_4px_0px_0px_#ffcc00] space-y-3 animate-fadeIn"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-3 border-b-3 border-black pb-3">
+            <div className="flex items-center justify-between gap-3 border-b-2 border-black pb-2">
               <div>
-                <p className="font-headline font-black text-lg uppercase">Filters</p>
+                <p className="font-headline font-black text-base uppercase">Filters</p>
                 <p className="font-mono text-[9px] uppercase text-zinc-500 font-bold">
                   {loading ? 'Loading...' : `${total.toLocaleString()} results`}
                 </p>
@@ -376,7 +376,7 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
               <button
                 type="button"
                 onClick={() => setMobileFiltersOpen(false)}
-                className="bg-black text-white border-2 border-black w-10 h-10 font-headline font-black text-xl"
+                className="bg-black text-white border-2 border-black w-8 h-8 font-headline font-black text-lg"
                 aria-label="Close filters"
               >
                 ×
@@ -386,7 +386,7 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
             <button
               type="button"
               onClick={() => setMobileFiltersOpen(false)}
-              className="w-full bg-[#ffcc00] border-2 border-black py-3 font-headline font-black text-xs uppercase shadow-[3px_3px_0px_0px_#101010]"
+              className="w-full bg-[#ffcc00] border-2 border-black py-2 font-headline font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_#101010]"
             >
               Show results
             </button>

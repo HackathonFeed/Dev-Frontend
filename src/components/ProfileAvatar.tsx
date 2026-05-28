@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { resolveAvatarUrl, userInitials } from '../lib/avatar';
 
 type ProfileAvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -28,13 +28,23 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
 }) => {
   const resolved = resolveAvatarUrl(avatarUrl);
   const sizeClass = SIZE_CLASS[size];
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [resolved]);
 
   return (
     <div
       className={`${sizeClass.box} border-2 border-black overflow-hidden rounded-[6px] shrink-0 flex items-center justify-center relative bg-zinc-900 shadow-[1px_1px_0px_0px_#1a1a1a] ${className}`}
     >
-      {resolved ? (
-        <img src={resolved} alt={`${name} profile photo`} className="w-full h-full object-cover" />
+      {resolved && !imageFailed ? (
+        <img
+          src={resolved}
+          alt={`${name} profile photo`}
+          className="w-full h-full object-cover"
+          onError={() => setImageFailed(true)}
+        />
       ) : (
         <span className={`font-headline font-black text-[#ffcc00] ${sizeClass.text}`}>
           {userInitials(name)}

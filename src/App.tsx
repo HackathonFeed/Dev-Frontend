@@ -1,24 +1,24 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Check, 
-  Layers, 
-  Sparkles, 
-  TrendingUp, 
-  Trash2, 
-  MapPin, 
-  Users, 
-  Calendar, 
-  ArrowUpRight, 
-  ChevronRight, 
-  LayoutGrid, 
-  PlusCircle, 
-  CheckSquare, 
-  Square, 
-  Compass, 
-  BookOpen, 
-  CheckCircle2, 
+import {
+  Plus,
+  Search,
+  Check,
+  Layers,
+  Sparkles,
+  TrendingUp,
+  Trash2,
+  MapPin,
+  Users,
+  Calendar,
+  ArrowUpRight,
+  ChevronRight,
+  LayoutGrid,
+  PlusCircle,
+  CheckSquare,
+  Square,
+  Compass,
+  BookOpen,
+  CheckCircle2,
   AlertTriangle,
   HelpCircle,
   Clock,
@@ -32,7 +32,9 @@ import {
   LogOut,
   Bookmark,
   Copy,
-  Loader2
+  Loader2,
+  Bot,
+  Zap,
 } from 'lucide-react';
 import { Hackathon, TrackedApplication, ValidatorResponse } from './types';
 import Markdown from 'react-markdown';
@@ -43,6 +45,7 @@ import { CircuitBoardIllustration } from './components/CircuitBoardIllustration'
 import { PublicProfileView } from './components/PublicProfileView';
 import { ProjectsTimelineView } from './components/ProjectsTimelineView';
 import { ProjectsView } from './components/ProjectsView';
+import { AIWorkspace } from './components/AIWorkspace';
 import { AiComingSoonModal } from './components/AiComingSoonModal';
 import { HackathonDetailModal } from './components/HackathonDetailModal';
 import { HackathonStatusBadge } from './components/HackathonStatusBadge';
@@ -75,6 +78,9 @@ import { ProfileAvatar } from './components/ProfileAvatar';
 import { ProfilePhotoSettings } from './components/ProfilePhotoSettings';
 import { OnboardingTour, shouldShowTour, queueTourForNewUser } from './components/OnboardingTour';
 import { OnboardingProfileSetup, shouldShowProfileSetup, queueProfileSetup } from './components/OnboardingProfileSetup';
+import { SubscriptionModal } from './components/SubscriptionModal';
+import { getMySubscription } from './api/subscriptions';
+import type { SubscriptionStatus } from './api/types';
 
 function parsePublicProfileUsername(): string | null {
   const match = window.location.pathname.match(/^\/u\/([a-zA-Z0-9_-]{3,30})\/?$/);
@@ -287,6 +293,10 @@ export default function App() {
   const [socialSaveLoading, setSocialSaveLoading] = useState(false);
   const [profileLinkCopied, setProfileLinkCopied] = useState(false);
 
+  // Subscription state
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+
   const applyRoute = useCallback((pathname = window.location.pathname) => {
     const profileUsername = parsePublicProfileUsername();
     setPublicProfileUsername(profileUsername);
@@ -337,6 +347,17 @@ export default function App() {
       }
     }
   }, [authLoading, isAuthenticated]);
+
+  // Load subscription status when authenticated
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) {
+      setSubscriptionStatus(null);
+      return;
+    }
+    getMySubscription()
+      .then(setSubscriptionStatus)
+      .catch(() => { /* silently ignore */ });
+  }, [isAuthenticated, authLoading]);
 
   // Router and redirection helper functions
   const handleTrackerAccess = () => {
@@ -1110,14 +1131,21 @@ export default function App() {
       { label: 'Hackathons', path: '/hackathons', tab: 'hackathons' as const, icon: <Trophy className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
       { label: 'Projects', path: '/projects', tab: 'showcase' as const, icon: <Layers className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
       { label: 'Tracking', path: '/tracking', tab: 'projects' as const, icon: <CheckSquare className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
-      { label: 'AI Validate', path: '/ai-validate', tab: 'team' as const, icon: <Sparkles className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+      { label: 'AI Copilot', path: '/ai-validate', tab: 'team' as const, icon: <Bot className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
       { label: 'Settings', path: '/settings', tab: 'settings' as const, icon: <Settings className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
     ];
     const currentMobileNavItem = mobileNavItems.find((item) => item.tab === dashboardTab) ?? mobileNavItems[0];
 
     return (
       <>
-      <div id="authenticated-workspace" className="min-h-screen bg-background text-primary font-sans antialiased flex flex-col lg:flex-row selection:bg-[#ffcc00] selection:text-[#1a1a1a]">
+      <div
+        id="authenticated-workspace"
+        className={`bg-background text-primary font-sans antialiased flex selection:bg-[#ffcc00] selection:text-[#1a1a1a] ${
+          dashboardTab === 'team'
+            ? 'flex h-[100dvh] flex-col overflow-visible lg:flex-row'
+            : 'min-h-screen flex flex-col lg:flex-row'
+        }`}
+      >
         <header className="lg:hidden sticky top-0 z-50 bg-[#eee9e0] border-b-4 border-black">
           <div className="px-4 py-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
@@ -1144,6 +1172,20 @@ export default function App() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* AI Points chip — mobile */}
+              {subscriptionStatus && (
+                <button
+                  type="button"
+                  onClick={() => setShowSubscriptionModal(true)}
+                  className="flex items-center gap-1.5 bg-white border-2 border-black px-2.5 py-1.5 shadow-[2px_2px_0px_0px_#101010] hover:bg-[#ffcc00] transition-colors cursor-pointer"
+                  title="AI Points"
+                >
+                  <Zap className="w-3 h-3 text-[#0055ff]" strokeWidth={3} />
+                  <span className="font-headline font-black text-[10px] tabular-nums">
+                    {subscriptionStatus.ai_points === -1 ? '∞' : subscriptionStatus.ai_points}
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={goToProfile}
@@ -1296,17 +1338,17 @@ export default function App() {
               </button>
 
               <button
-                id="tour-nav-validate"
+                id="tour-nav-ai"
                 onClick={() => navigateTo('/ai-validate')}
                 className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
                   dashboardTab === 'team'
-                    ? 'bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]'
-                    : 'bg-white border-black text-primary hover:bg-[#ffcc00]/10 hover:translate-y-[-2px] active:translate-y-0 shadow-[3px_3px_0px_0px_#1a1a1a]'
+                    ? 'bg-[#0055ff] border-black text-white shadow-[3px_3px_0px_0px_#1a1a1a]'
+                    : 'bg-white border-black text-primary hover:bg-[#0055ff]/10 hover:translate-y-[-2px] active:translate-y-0 shadow-[3px_3px_0px_0px_#1a1a1a]'
                 }`}
               >
                 <span className="flex items-center gap-3">
-                  <Sparkles className="w-4 h-4 shrink-0" strokeWidth={2.5} />
-                  AI VALIDATE
+                  <Bot className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+                  AI COPILOT
                 </span>
                 <span className="text-[10px] opacity-30 select-none">»</span>
               </button>
@@ -1315,6 +1357,73 @@ export default function App() {
           </div>
 
           <div className="mt-8 space-y-4">
+
+            {/* AI Points Widget */}
+            {subscriptionStatus && (
+              <div className="border-3 border-black bg-white p-4 space-y-2.5 shadow-[3px_3px_0px_0px_#1a1a1a]">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-3.5 h-3.5 text-[#0055ff]" strokeWidth={2.5} />
+                    <span className="font-mono text-[9px] uppercase font-bold text-zinc-500 tracking-wider">AI Points</span>
+                  </div>
+                  <span className={`font-mono text-[8px] font-black uppercase px-1.5 py-0.5 border border-black ${
+                    subscriptionStatus.plan === 'champion'
+                      ? 'bg-[#1a1a1a] text-white'
+                      : subscriptionStatus.plan === 'builder'
+                        ? 'bg-[#0055ff] text-white'
+                        : 'bg-[#ffcc00] text-[#1a1a1a]'
+                  }`}>
+                    {subscriptionStatus.plan.toUpperCase()}
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div>
+                  <div className="h-2 bg-zinc-200 border border-black overflow-hidden mb-1">
+                    <div
+                      className={`h-full transition-all duration-700 ${
+                        subscriptionStatus.ai_points === -1
+                          ? 'w-full bg-[#0055ff]'
+                          : subscriptionStatus.ai_points > 20
+                            ? 'bg-[#0055ff]'
+                            : subscriptionStatus.ai_points > 5
+                              ? 'bg-[#ffcc00]'
+                              : 'bg-[#e63b2e]'
+                      }`}
+                      style={{
+                        width: subscriptionStatus.ai_points === -1
+                          ? '100%'
+                          : `${Math.min(100, (subscriptionStatus.ai_points / (subscriptionStatus.plan === 'builder' ? 500 : 50)) * 100)}%`
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-headline font-black text-base tracking-tighter">
+                      {subscriptionStatus.ai_points === -1 ? '∞' : subscriptionStatus.ai_points}
+                      <span className="font-mono text-[8px] text-zinc-500 ml-0.5 font-bold">pts</span>
+                    </span>
+                    {subscriptionStatus.messages_remaining !== -1 && (
+                      <span className="font-mono text-[8px] text-zinc-500 uppercase font-bold">
+                        ~{subscriptionStatus.messages_remaining} msgs
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Upgrade button — show only if not champion */}
+                {subscriptionStatus.plan !== 'champion' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSubscriptionModal(true)}
+                    className="w-full py-2 px-3 bg-[#1a1a1a] text-white border-2 border-black font-headline font-black text-[10px] uppercase tracking-wider hover:bg-[#ffcc00] hover:text-[#1a1a1a] transition-colors cursor-pointer shadow-[2px_2px_0px_0px_#1a1a1a] flex items-center justify-center gap-1.5"
+                  >
+                    <Zap className="w-3 h-3" strokeWidth={3} />
+                    UPGRADE PLAN
+                  </button>
+                )}
+              </div>
+            )}
+
             <button
               id="tour-nav-settings"
               onClick={() => navigateTo('/settings')}
@@ -1336,7 +1445,13 @@ export default function App() {
         {/* ========================================================
             RIGHT CONTENT AREA / MAIN BODY PANELS
             ======================================================== */}
-        <main className="flex-1 min-h-screen bg-background p-4 sm:p-6 lg:p-10 overflow-y-auto max-w-[1440px] mx-auto w-full min-w-0">
+        <main
+          className={
+            dashboardTab === 'team'
+              ? 'flex-1 flex flex-col min-h-0 bg-background w-full min-w-0 overflow-visible p-2 sm:p-3 lg:p-4'
+              : 'flex-1 min-h-screen bg-background p-4 sm:p-6 lg:p-10 overflow-y-auto max-w-[1440px] mx-auto w-full min-w-0'
+          }
+        >
           
           {/* 
             --------------------------------------------------------
@@ -1559,7 +1674,14 @@ export default function App() {
             SUB-TAB: PROJECTS SHOWCASE (Devfolio submissions)
             --------------------------------------------------------
           */}
-          {dashboardTab === 'showcase' && <ProjectsView />}
+          {dashboardTab === 'showcase' && (
+            <ProjectsView
+              currentUserId={user?.id ?? null}
+              subscriptionStatus={subscriptionStatus}
+              onUpgradeClick={() => setShowSubscriptionModal(true)}
+              onSubscriptionChange={setSubscriptionStatus}
+            />
+          )}
 
           {/*
             --------------------------------------------------------
@@ -1581,36 +1703,37 @@ export default function App() {
           )}
 
 
-          {/* 
+          {/*
             --------------------------------------------------------
-            SUB-TAB: AI VALIDATE
+            SUB-TAB: AI COPILOT (chat + validator combined)
             --------------------------------------------------------
           */}
           {dashboardTab === 'team' && (
-            <div className="space-y-8 animate-fadeIn">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b-4 border-black pb-4 mb-8 gap-4">
-                <div>
-                  <span className="font-mono text-[10px] bg-black text-[#ffcc00] py-1 px-3.5 uppercase font-bold tracking-widest select-none">
-                    Neural analysis engine
-                  </span>
-                  <h2 className="font-headline font-black text-3xl sm:text-4xl md:text-5xl uppercase tracking-tighter mt-2">
-                    AI Validate
-                  </h2>
+            <div className="flex flex-1 flex-col min-h-0 w-full">
+              {/* Out-of-points banner */}
+              {subscriptionStatus && subscriptionStatus.ai_points === 0 && (
+                <div className="shrink-0 bg-[#e63b2e] border-b-4 border-black px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-white" strokeWidth={3} />
+                    <span className="font-headline font-black text-sm uppercase text-white tracking-wide">
+                      You're out of AI points!
+                    </span>
+                    <span className="font-mono text-[10px] text-white/70 uppercase">Upgrade to keep chatting.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowSubscriptionModal(true)}
+                    className="bg-white text-[#e63b2e] border-2 border-white px-4 py-1.5 font-headline font-black text-xs uppercase shadow-[2px_2px_0px_0px_#1a1a1a] hover:bg-[#ffcc00] hover:text-[#1a1a1a] transition-colors cursor-pointer"
+                  >
+                    VIEW PLANS
+                  </button>
                 </div>
-                <p className="font-mono text-[11px] uppercase text-zinc-500 font-bold max-w-sm sm:text-right leading-tight">
-                  Run your hackathon idea through AI jurors for scores, critique, and upgrade suggestions.
-                </p>
-              </div>
-
-              <div className="bg-white border-4 border-black p-6 sm:p-10 md:p-16 shadow-[6px_6px_0px_0px_#0055ff] text-center max-w-xl mx-auto">
-                <Sparkles className="w-12 h-12 mx-auto text-[#0055ff] mb-4" strokeWidth={2.5} />
-                <h3 className="font-headline font-black text-3xl uppercase tracking-tight mb-3">
-                  Coming soon
-                </h3>
-                <p className="font-mono text-xs uppercase font-bold text-zinc-500">
-                  AI idea validation is on the way. Check back soon.
-                </p>
-              </div>
+              )}
+              <AIWorkspace
+                savedBookmarks={savedBookmarks}
+                trackedApps={trackedApps}
+                user={user}
+              />
             </div>
           )}
 
@@ -1892,6 +2015,16 @@ export default function App() {
           }}
         />
       )}
+      <SubscriptionModal
+        open={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        currentStatus={subscriptionStatus}
+        userEmail={user?.email}
+        userName={user?.name}
+        onUpgradeSuccess={(status) => {
+          setSubscriptionStatus(status);
+        }}
+      />
       </>
     );
   }

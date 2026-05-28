@@ -20,6 +20,8 @@ export interface TokenPayload {
   expires_in: number;
 }
 
+export type SubscriptionPlan = 'hacker' | 'builder' | 'champion';
+
 export interface User {
   id: string;
   name: string;
@@ -32,7 +34,44 @@ export interface User {
   linkedin_username?: string | null;
   twitter_username?: string | null;
   website?: string | null;
+  subscription_plan: SubscriptionPlan;
+  ai_points: number;              // -1 = unlimited
+  plan_expires_at?: string | null;
   created_at: string;
+}
+
+export interface PlanInfo {
+  key: SubscriptionPlan;
+  name: string;
+  price_usd: number;
+  price_inr: number;   // 0 = free, else rupees
+  points: number;
+  messages_per_cycle: string;
+  features: string[];
+}
+
+export interface CreateOrderResponse {
+  order_id: string;
+  amount: number;      // paise (INR × 100)
+  currency: string;
+  key_id: string;
+  plan: SubscriptionPlan;
+  plan_name: string;
+}
+
+export interface VerifyPaymentRequest {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+  plan: SubscriptionPlan;
+}
+
+export interface SubscriptionStatus {
+  plan: SubscriptionPlan;
+  ai_points: number;
+  ai_message_cost: number;
+  messages_remaining: number;     // -1 = unlimited
+  plan_expires_at: string | null;
 }
 
 export interface HackathonApi {
