@@ -826,15 +826,6 @@ function ProjectDetailModal({ project, onClose }: ProjectDetailModalProps) {
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 )}
-                <a
-                  href={project.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between gap-3 border-2 border-black bg-white px-3 py-2 font-headline font-black text-xs uppercase hover:bg-zinc-100 transition-colors"
-                >
-                  <span>Source page</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
                 {!project.github_url && !project.demo_url && (
                   <p className="font-mono text-[10px] uppercase font-bold text-zinc-400">
                     No GitHub or demo URL available for this project.

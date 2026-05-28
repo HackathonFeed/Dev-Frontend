@@ -160,6 +160,29 @@ export interface AdminStats {
   events: Record<string, unknown>;
 }
 
+export type UserRole = 'user' | 'admin' | 'moderator';
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  role: UserRole;
+  subscription_plan: SubscriptionPlan;
+  ai_points: number;
+  plan_expires_at: string | null;
+  avatar_url: string | null;
+  created_at: string | null;
+}
+
+export interface AdminUserListResponse {
+  items: AdminUser[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
 export interface LeaderboardEntryApi {
   user_id: string;
   name: string;

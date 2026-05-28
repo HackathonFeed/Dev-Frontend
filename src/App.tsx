@@ -35,6 +35,7 @@ import {
   Loader2,
   Bot,
   Zap,
+  Shield,
 } from 'lucide-react';
 import { Hackathon, TrackedApplication, ValidatorResponse } from './types';
 import Markdown from 'react-markdown';
@@ -79,6 +80,8 @@ import { ProfilePhotoSettings } from './components/ProfilePhotoSettings';
 import { OnboardingTour, shouldShowTour, queueTourForNewUser } from './components/OnboardingTour';
 import { OnboardingProfileSetup, shouldShowProfileSetup, queueProfileSetup } from './components/OnboardingProfileSetup';
 import { SubscriptionModal } from './components/SubscriptionModal';
+import { AdminPanel } from './components/AdminPanel';
+import { ForgotPasswordModal } from './components/ForgotPasswordModal';
 import { getMySubscription } from './api/subscriptions';
 import type { SubscriptionStatus } from './api/types';
 
@@ -207,7 +210,7 @@ function isEndedHackathon(hack: Partial<RegisterHackathonPayload> | undefined): 
 
 type ActiveTab = 'landing' | 'explore' | 'tracker' | 'validator' | 'auth';
 type AuthMode = 'login' | 'register';
-type DashboardTab = 'dashboard' | 'hackathons' | 'projects' | 'showcase' | 'team' | 'settings' | 'profile';
+type DashboardTab = 'dashboard' | 'hackathons' | 'projects' | 'showcase' | 'team' | 'settings' | 'profile' | 'admin';
 
 const PROTECTED_PATHS = new Set([
   '/explore',
@@ -220,6 +223,7 @@ const PROTECTED_PATHS = new Set([
   '/projects',
   '/settings',
   '/profile',
+  '/admin',
 ]);
 
 function activeTabFromPath(pathname: string): ActiveTab {
@@ -245,6 +249,8 @@ function dashboardTabFromPath(pathname: string): DashboardTab {
       return 'settings';
     case '/profile':
       return 'profile';
+    case '/admin':
+      return 'admin';
     case '/dashboard':
     default:
       return 'dashboard';
@@ -296,6 +302,9 @@ export default function App() {
   // Subscription state
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+
+  // Forgot password modal
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const applyRoute = useCallback((pathname = window.location.pathname) => {
     const profileUsername = parsePublicProfileUsername();
@@ -1126,6 +1135,7 @@ export default function App() {
       { label: 'Tracking', path: '/tracking', tab: 'projects' as const, icon: <CheckSquare className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
       { label: 'AI Copilot', path: '/ai-validate', tab: 'team' as const, icon: <Bot className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
       { label: 'Settings', path: '/settings', tab: 'settings' as const, icon: <Settings className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+      ...(user?.role === 'admin' ? [{ label: 'Admin', path: '/admin', tab: 'admin' as const, icon: <Shield className="w-4 h-4 shrink-0" strokeWidth={2.5} /> }] : []),
     ];
     const currentMobileNavItem = mobileNavItems.find((item) => item.tab === dashboardTab) ?? mobileNavItems[0];
 
@@ -1345,6 +1355,23 @@ export default function App() {
                 </span>
                 <span className="text-[10px] opacity-30 select-none">»</span>
               </button>
+
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => navigateTo('/admin')}
+                  className={`w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer ${
+                    dashboardTab === 'admin'
+                      ? 'bg-[#e63b2e] border-black text-white shadow-[3px_3px_0px_0px_#1a1a1a]'
+                      : 'bg-white border-[#e63b2e] text-[#e63b2e] hover:bg-[#e63b2e]/10 hover:translate-y-[-2px] active:translate-y-0 shadow-[3px_3px_0px_0px_#1a1a1a]'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <Shield className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+                    ADMIN
+                  </span>
+                  <span className="text-[10px] opacity-30 select-none">»</span>
+                </button>
+              )}
 
             </nav>
           </div>
@@ -1981,6 +2008,14 @@ export default function App() {
             </div>
           )}
 
+          {/*
+            --------------------------------------------------------
+            ADMIN PANEL
+            --------------------------------------------------------
+          */}
+          {dashboardTab === 'admin' && user?.role === 'admin' && (
+            <AdminPanel currentUserId={user.id} />
+          )}
 
         </main>
 
@@ -2017,6 +2052,11 @@ export default function App() {
         onUpgradeSuccess={(status) => {
           setSubscriptionStatus(status);
         }}
+      />
+      <ForgotPasswordModal
+        open={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+        prefillEmail={inputEmail}
       />
       </>
     );
@@ -3635,8 +3675,8 @@ export default function App() {
                         type="text" 
                         required
                         minLength={2}
-                        placeholder="JOHN DOE"
-                        className="w-full bg-white p-3 border-2 border-primary font-bold placeholder:text-primary/20 text-[#1a1a1a] uppercase text-xs focus:ring-0 focus:outline-none"
+                        placeholder="John Doe"
+                        className="w-full bg-white p-3 border-2 border-primary font-bold placeholder:text-primary/20 text-[#1a1a1a] text-xs focus:ring-0 focus:outline-none"
                         value={inputName}
                         onChange={(e) => setInputName(e.target.value)}
                       />
@@ -3651,8 +3691,8 @@ export default function App() {
                     <input 
                       type="email" 
                       required
-                      placeholder="SYS.ADMIN@HACKATHON.DEV"
-                      className="w-full bg-white p-3 border-2 border-primary font-bold placeholder:text-primary/20 text-[#1a1a1a] uppercase text-xs focus:ring-0 focus:outline-none"
+                      placeholder="sys.admin@hackathon.dev"
+                      className="w-full bg-white p-3 border-2 border-primary font-bold placeholder:text-primary/20 text-[#1a1a1a] text-xs focus:ring-0 focus:outline-none"
                       value={inputEmail}
                       onChange={(e) => setInputEmail(e.target.value)}
                     />
@@ -3664,9 +3704,9 @@ export default function App() {
                       <label className="font-mono text-[11px] uppercase font-bold text-primary select-none tracking-wider">
                         SECURITY PROTOCOL
                       </label>
-                      <button 
+                      <button
                         type="button"
-                        onClick={() => setApiError('Verification key recovery signal dispatched to neural index.')}
+                        onClick={() => setShowForgotPassword(true)}
                         className="font-mono text-[10px] uppercase text-primary/60 hover:text-primary underline cursor-pointer"
                       >
                         FORGOT PROTOCOL?
@@ -3747,6 +3787,11 @@ export default function App() {
     <AiComingSoonModal
       open={isAiComingSoonOpen}
       onClose={() => setIsAiComingSoonOpen(false)}
+    />
+    <ForgotPasswordModal
+      open={showForgotPassword}
+      onClose={() => setShowForgotPassword(false)}
+      prefillEmail={inputEmail}
     />
     </>
   );
