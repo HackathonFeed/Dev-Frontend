@@ -266,7 +266,7 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
             <FilterChip active={values.platform.length === 0} onClick={() => onChange({ platform: [] })}>
               All
             </FilterChip>
-            {platforms.map((p) => (
+            {Array.from(new Map(platforms.map((p) => [p.platform, p])).values()).map((p) => (
               <FilterChip
                 key={p.platform}
                 active={values.platform.includes(p.platform)}
@@ -293,7 +293,9 @@ export const HackathonFilters: React.FC<HackathonFiltersProps> = ({
             >
               All
             </FilterChip>
-            {themes.slice(0, 10).map((t) => (
+            {Array.from(new Map(themes.map((t) => [t.theme, t])).values())
+              .slice(0, 10)
+              .map((t) => (
               <FilterChip
                 key={t.theme}
                 active={values.theme.includes(t.theme) || values.domain.includes(t.theme)}

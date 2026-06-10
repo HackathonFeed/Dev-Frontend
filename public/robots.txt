@@ -1,4 +1,17 @@
 User-agent: *
 Allow: /
+Allow: /hackathons
+Allow: /h/
+Allow: /u/
+
+Disallow: /login
+Disallow: /signup
+Disallow: /dashboard
+Disallow: /tracking
+Disallow: /projects
+Disallow: /ai-validate
+Disallow: /settings
+Disallow: /profile
+Disallow: /admin
 
 Sitemap: https://www.hackathonfeed.com/sitemap.xml

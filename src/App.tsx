@@ -49,6 +49,7 @@ import { ProjectsView } from './components/ProjectsView';
 import { AIWorkspace } from './components/AIWorkspace';
 import { AiComingSoonModal } from './components/AiComingSoonModal';
 import { HackathonDetailModal } from './components/HackathonDetailModal';
+import { HackathonDetailPage } from './components/HackathonDetailPage';
 import { HackathonStatusBadge } from './components/HackathonStatusBadge';
 import {
   HackathonFilters,
@@ -58,6 +59,7 @@ import {
 import { GoogleSignInButton } from './components/GoogleSignInButton';
 import { useAuth, ApiError } from './context/AuthContext';
 import { useHackathons } from './hooks/useHackathons';
+import { useSeo } from './hooks/useSeo';
 import { useTrackedProjects } from './hooks/useTrackedProjects';
 import {
   addBookmark,
@@ -88,6 +90,11 @@ import type { SubscriptionStatus } from './api/types';
 function parsePublicProfileUsername(): string | null {
   const match = window.location.pathname.match(/^\/u\/([a-zA-Z0-9_-]{3,30})\/?$/);
   return match?.[1]?.toLowerCase() ?? null;
+}
+
+function parseHackathonDetailId(): string | null {
+  const match = window.location.pathname.match(/^\/h\/([a-zA-Z0-9_-]+)\/?$/);
+  return match?.[1] ?? null;
 }
 
 type RegisterHackathonPayload = {
@@ -213,12 +220,10 @@ type AuthMode = 'login' | 'register';
 type DashboardTab = 'dashboard' | 'hackathons' | 'projects' | 'showcase' | 'team' | 'settings' | 'profile' | 'admin';
 
 const PROTECTED_PATHS = new Set([
-  '/explore',
   '/tracker',
   '/ai-validate',
   '/validator',
   '/dashboard',
-  '/hackathons',
   '/tracking',
   '/projects',
   '/settings',
@@ -226,8 +231,11 @@ const PROTECTED_PATHS = new Set([
   '/admin',
 ]);
 
+const PUBLIC_EXPLORE_PATHS = new Set(['/hackathons', '/explore']);
+
 function activeTabFromPath(pathname: string): ActiveTab {
   if (pathname === '/login' || pathname === '/signup' || PROTECTED_PATHS.has(pathname)) return 'auth';
+  if (PUBLIC_EXPLORE_PATHS.has(pathname)) return 'explore';
   return 'landing';
 }
 
@@ -265,6 +273,7 @@ export default function App() {
 
   const [authMode, setAuthMode] = useState<AuthMode>(() => authModeFromPath(window.location.pathname));
   const [authTransitionMode, setAuthTransitionMode] = useState<AuthMode | null>(null);
+  const [routeTransitionLabel, setRouteTransitionLabel] = useState<{ label: string; caption: string } | null>(null);
   const [pendingTab, setPendingTab] = useState<'tracker' | 'explore' | 'validator' | null>(null);
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>(() => dashboardTabFromPath(window.location.pathname));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -294,6 +303,7 @@ export default function App() {
   const [publicProfileUsername, setPublicProfileUsername] = useState<string | null>(
     () => parsePublicProfileUsername(),
   );
+  const [hackathonDetailId, setHackathonDetailId] = useState<string | null>(() => parseHackathonDetailId());
   const [socialHandles, setSocialHandles] = useState<SocialHandles>(EMPTY_SOCIAL_HANDLES);
   const [socialSaveMessage, setSocialSaveMessage] = useState<string | null>(null);
   const [socialSaveLoading, setSocialSaveLoading] = useState(false);
@@ -309,7 +319,9 @@ export default function App() {
   const applyRoute = useCallback((pathname = window.location.pathname) => {
     const profileUsername = parsePublicProfileUsername();
     setPublicProfileUsername(profileUsername);
-    if (profileUsername) return;
+    const detailId = parseHackathonDetailId();
+    setHackathonDetailId(detailId);
+    if (profileUsername || detailId) return;
 
     setActiveTab(activeTabFromPath(pathname));
     setAuthMode(authModeFromPath(pathname));
@@ -335,6 +347,8 @@ export default function App() {
       if (path === '/tracker') nextPath = '/tracking';
     } else if (PROTECTED_PATHS.has(path)) {
       nextPath = '/login';
+    } else if (path === '/explore') {
+      nextPath = '/hackathons';
     }
 
     if (nextPath && nextPath !== path) {
@@ -552,6 +566,14 @@ export default function App() {
     }
   }, [user?.role, dashboardTab]);
 
+  const navigateWithTransition = (path: string, label: string, caption = 'Routing to') => {
+    setRouteTransitionLabel({ label, caption });
+    window.setTimeout(() => {
+      navigateTo(path);
+      window.setTimeout(() => setRouteTransitionLabel(null), 420);
+    }, 260);
+  };
+
   const openAuth = (mode: 'login' | 'register') => {
     setAuthMode(mode);
     setAuthError(null);
@@ -730,6 +752,13 @@ export default function App() {
         : (hackOrTitle.deadline ?? fromList?.deadline ?? ''),
       url: typeof hackOrTitle === 'string' ? fromList?.url : (hackOrTitle.url ?? fromList?.url),
     };
+
+    if (!isAuthenticated) {
+      setPendingRegisterHack(payload);
+      setPendingTab('tracker');
+      navigateTo('/login');
+      return;
+    }
 
     const loadingKey = payload.id ?? payload.title;
     setRegisterLoading(loadingKey);
@@ -1067,6 +1096,61 @@ export default function App() {
     );
   };
 
+  const seoConfig = (() => {
+    if (publicProfileUsername) {
+      return {
+        title: `@${publicProfileUsername} on HackathonFeed`,
+        description: `Public hackathon profile for @${publicProfileUsername} — projects, hackathons, and submissions on HackathonFeed.`,
+        canonicalPath: `/u/${publicProfileUsername}`,
+      };
+    }
+    if (activeTab === 'explore') {
+      return {
+        title: 'Browse Hackathons — HackathonFeed',
+        description:
+          'Search and filter hundreds of active hackathons from Devfolio, Devpost, ETHGlobal, and more. Find online, in-person, AI, Web3, and student events with prize pools.',
+        canonicalPath: '/hackathons',
+      };
+    }
+    if (activeTab === 'auth') {
+      const isSignup = authMode === 'register';
+      const dashboardTitles: Record<DashboardTab, string> = {
+        dashboard: 'Dashboard — HackathonFeed',
+        hackathons: 'Hackathons — HackathonFeed',
+        projects: 'Tracked Projects — HackathonFeed',
+        showcase: 'Project Showcase — HackathonFeed',
+        team: 'AI Copilot — HackathonFeed',
+        settings: 'Settings — HackathonFeed',
+        profile: 'Profile — HackathonFeed',
+        admin: 'Admin — HackathonFeed',
+      };
+      if (!isAuthenticated) {
+        return {
+          title: isSignup ? 'Create your HackathonFeed account' : 'Sign in to HackathonFeed',
+          description: isSignup
+            ? 'Create a free HackathonFeed account to discover hackathons, track applications, and validate ideas with AI.'
+            : 'Sign in to track hackathon applications, save events, and access your AI copilot.',
+          canonicalPath: isSignup ? '/signup' : '/login',
+          noindex: true,
+        };
+      }
+      return {
+        title: dashboardTitles[dashboardTab],
+        description: 'Your HackathonFeed workspace — discover hackathons, track applications, and ship winning submissions.',
+        canonicalPath: window.location.pathname,
+        noindex: true,
+      };
+    }
+    return {
+      title: 'HackathonFeed | Discover, Track, and Win Hackathons',
+      description:
+        'HackathonFeed helps builders discover active hackathons, track applications, explore winning projects, and use an AI copilot to plan stronger submissions.',
+      canonicalPath: '/',
+    };
+  })();
+
+  useSeo(seoConfig);
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background font-mono text-sm uppercase font-bold">
@@ -1102,6 +1186,28 @@ export default function App() {
     />
   ) : null;
 
+  if (hackathonDetailId) {
+    return (
+      <HackathonDetailPage
+        hackathonId={hackathonDetailId}
+        isAuthenticated={isAuthenticated}
+        isBookmarked={bookmarkIds.has(hackathonDetailId)}
+        bookmarkLoading={bookmarkLoading === hackathonDetailId}
+        isRegistered={isHackathonRegistered(trackedApps, {
+          id: hackathonDetailId,
+          title: hackathons.find((h) => h.id === hackathonDetailId)?.title ?? '',
+        })}
+        registerLoading={registerLoading === hackathonDetailId}
+        onToggleBookmark={toggleBookmark}
+        onRegister={(payload) => {
+          void handleHackathonRegister(payload);
+        }}
+        onBack={() => navigateTo('/hackathons')}
+        onSignIn={() => openAuth('login')}
+      />
+    );
+  }
+
   if (publicProfileUsername) {
     return (
       <PublicProfileView
@@ -1126,17 +1232,23 @@ export default function App() {
     );
   }
 
-  if (isAuthenticated) {
+  const isPublicHackathonsView = !isAuthenticated && PUBLIC_EXPLORE_PATHS.has(window.location.pathname);
+
+  if (isAuthenticated || isPublicHackathonsView) {
     const displayUsername = user?.name?.toUpperCase() ?? user?.email?.split('@')[0].toUpperCase() ?? 'HACKER_01';
-    const mobileNavItems = [
-      { label: 'Dashboard', path: '/dashboard', tab: 'dashboard' as const, icon: <LayoutGrid className="w-4 h-4 shrink-0" strokeWidth={3} /> },
-      { label: 'Hackathons', path: '/hackathons', tab: 'hackathons' as const, icon: <Trophy className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
-      { label: 'Projects', path: '/projects', tab: 'showcase' as const, icon: <Layers className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
-      { label: 'Tracking', path: '/tracking', tab: 'projects' as const, icon: <CheckSquare className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
-      { label: 'AI Copilot', path: '/ai-validate', tab: 'team' as const, icon: <Bot className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
-      { label: 'Settings', path: '/settings', tab: 'settings' as const, icon: <Settings className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
-      ...(user?.role === 'admin' ? [{ label: 'Admin', path: '/admin', tab: 'admin' as const, icon: <Shield className="w-4 h-4 shrink-0" strokeWidth={2.5} /> }] : []),
-    ];
+    const mobileNavItems = isPublicHackathonsView
+      ? [
+          { label: 'Hackathons', path: '/hackathons', tab: 'hackathons' as const, icon: <Trophy className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+        ]
+      : [
+          { label: 'Dashboard', path: '/dashboard', tab: 'dashboard' as const, icon: <LayoutGrid className="w-4 h-4 shrink-0" strokeWidth={3} /> },
+          { label: 'Hackathons', path: '/hackathons', tab: 'hackathons' as const, icon: <Trophy className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+          { label: 'Projects', path: '/projects', tab: 'showcase' as const, icon: <Layers className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+          { label: 'Tracking', path: '/tracking', tab: 'projects' as const, icon: <CheckSquare className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+          { label: 'AI Copilot', path: '/ai-validate', tab: 'team' as const, icon: <Bot className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+          { label: 'Settings', path: '/settings', tab: 'settings' as const, icon: <Settings className="w-4 h-4 shrink-0" strokeWidth={2.5} /> },
+          ...(user?.role === 'admin' ? [{ label: 'Admin', path: '/admin', tab: 'admin' as const, icon: <Shield className="w-4 h-4 shrink-0" strokeWidth={2.5} /> }] : []),
+        ];
     const currentMobileNavItem = mobileNavItems.find((item) => item.tab === dashboardTab) ?? mobileNavItems[0];
 
     return (
@@ -1164,7 +1276,7 @@ export default function App() {
               <div className="min-w-0">
                 <button
                   type="button"
-                  onClick={() => navigateTo('/dashboard')}
+                  onClick={() => navigateTo(isPublicHackathonsView ? '/' : '/dashboard')}
                   className="font-headline font-black text-lg uppercase tracking-tighter text-[#1a1a1a] bg-transparent border-none cursor-pointer block truncate"
                 >
                   HackathonFeed
@@ -1175,8 +1287,17 @@ export default function App() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {isPublicHackathonsView && (
+                <button
+                  type="button"
+                  onClick={() => openAuth('login')}
+                  className="bg-[#ffcc00] border-2 border-black px-3 py-1.5 font-headline font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer"
+                >
+                  Sign in
+                </button>
+              )}
               {/* AI Points chip — mobile */}
-              {subscriptionStatus && (
+              {!isPublicHackathonsView && subscriptionStatus && (
                 <button
                   type="button"
                   onClick={() => setShowSubscriptionModal(true)}
@@ -1189,22 +1310,24 @@ export default function App() {
                   </span>
                 </button>
               )}
-              <button
-                type="button"
-                onClick={goToProfile}
-                className="flex items-center gap-2 bg-white border-2 border-black px-2 py-2 shadow-[2px_2px_0px_0px_#101010]"
-                title="View your public profile"
-              >
-                {user && (
-                  <ProfileAvatar
-                    name={user.name}
-                    avatarUrl={user.avatar_url}
-                    size="sm"
-                    showOnlineBadge
-                  />
-                )}
-                <span className="sr-only">Open profile</span>
-              </button>
+              {!isPublicHackathonsView && (
+                <button
+                  type="button"
+                  onClick={goToProfile}
+                  className="flex items-center gap-2 bg-white border-2 border-black px-2 py-2 shadow-[2px_2px_0px_0px_#101010]"
+                  title="View your public profile"
+                >
+                  {user && (
+                    <ProfileAvatar
+                      name={user.name}
+                      avatarUrl={user.avatar_url}
+                      size="sm"
+                      showOnlineBadge
+                    />
+                  )}
+                  <span className="sr-only">Open profile</span>
+                </button>
+              )}
             </div>
           </div>
           {mobileMenuOpen && (
@@ -1237,6 +1360,76 @@ export default function App() {
         {/* ========================================================
             LEFT SIDEBAR NAVIGATION
             ======================================================== */}
+        {isPublicHackathonsView ? (
+          <aside className="hidden lg:flex w-[280px] bg-[#eee9e0] border-r-4 border-black flex-col justify-between p-6 shrink-0 h-screen sticky top-0 overflow-y-auto z-40">
+            <div>
+              <button
+                type="button"
+                onClick={() => navigateTo('/')}
+                className="flex items-center gap-3 border-b-2 border-black pb-4 w-full text-left bg-transparent border-none cursor-pointer"
+              >
+                <span className="w-5 h-5 bg-[#e63b2e] border-2 border-[#1a1a1a]"></span>
+                <span className="font-headline font-black text-2xl tracking-tighter text-[#1a1a1a] uppercase italic select-none">
+                  HackathonFeed
+                </span>
+              </button>
+
+              <div className="border-3 border-black p-5 mt-6 bg-white shadow-[4px_4px_0px_0px_#1a1a1a] rounded-[8px]">
+                <p className="font-mono text-[10px] uppercase font-bold text-zinc-500 tracking-widest mb-2">
+                  Welcome, builder
+                </p>
+                <p className="font-headline font-black text-lg uppercase tracking-tight text-[#1a1a1a] leading-tight mb-4">
+                  Sign in to track, bookmark, and validate ideas with AI.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openAuth('login')}
+                  className="w-full py-3 px-4 bg-[#ffcc00] text-[#1a1a1a] border-2 border-black font-headline font-black text-xs uppercase tracking-wider hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer shadow-[3px_3px_0px_0px_#1a1a1a] mb-2"
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuth('register')}
+                  className="w-full py-3 px-4 bg-white text-[#1a1a1a] border-2 border-black font-headline font-black text-xs uppercase tracking-wider hover:bg-[#ffcc00] transition-colors cursor-pointer shadow-[3px_3px_0px_0px_#1a1a1a]"
+                >
+                  Create account
+                </button>
+              </div>
+
+              <nav className="flex flex-col gap-3 mt-8">
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/hackathons')}
+                  className="w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer bg-[#ffcc00] border-black text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a]"
+                >
+                  <span className="flex items-center gap-3">
+                    <Trophy className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+                    HACKATHONS
+                  </span>
+                  <span className="text-[10px] opacity-30 select-none">»</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/')}
+                  className="w-full flex items-center justify-between px-4 py-3 font-headline font-black text-xs uppercase tracking-wider transition-all border-3 cursor-pointer bg-white border-black text-primary hover:bg-[#ffcc00]/10 hover:translate-y-[-2px] active:translate-y-0 shadow-[3px_3px_0px_0px_#1a1a1a]"
+                >
+                  <span className="flex items-center gap-3">
+                    <LayoutGrid className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+                    HOME
+                  </span>
+                  <span className="text-[10px] opacity-30 select-none">»</span>
+                </button>
+              </nav>
+            </div>
+
+            <div className="mt-8">
+              <p className="font-mono text-[9px] uppercase font-bold text-zinc-500 tracking-widest text-center">
+                Form follows function.
+              </p>
+            </div>
+          </aside>
+        ) : (
         <aside className="hidden lg:flex w-[280px] bg-[#eee9e0] border-r-4 border-black flex-col justify-between p-6 shrink-0 h-screen sticky top-0 overflow-y-auto z-40">
           <div>
             <div className="flex items-center gap-3 border-b-2 border-black pb-4">
@@ -1461,6 +1654,7 @@ export default function App() {
             </button>
           </div>
         </aside>
+        )}
 
         {/* ========================================================
             RIGHT CONTENT AREA / MAIN BODY PANELS
@@ -1614,15 +1808,15 @@ export default function App() {
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
                   {filteredHackathons.map((hack) => (
-                    <div 
+                    <div
                       key={hack.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => setSelectedHackathonId(hack.id)}
+                      onClick={() => navigateTo(`/h/${hack.id}`)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
-                          setSelectedHackathonId(hack.id);
+                          navigateTo(`/h/${hack.id}`);
                         }
                       }}
                       className="bg-white border-3 border-black p-4 sm:p-6 flex flex-col justify-between gap-5 sm:gap-6 hover:translate-y-[-2px] transition-all cursor-pointer min-w-0"
@@ -1671,13 +1865,17 @@ export default function App() {
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>
                           )}
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setSelectedHackathonId(hack.id); }}
-                            className="flex-1 sm:flex-none bg-[#0055ff] text-white font-headline font-black text-xs uppercase px-4 py-2 border-2 border-black shadow-[2px_2px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-all cursor-pointer"
+                          <a
+                            href={`/h/${hack.id}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              navigateTo(`/h/${hack.id}`);
+                            }}
+                            className="flex-1 sm:flex-none text-center bg-[#0055ff] text-white font-headline font-black text-xs uppercase px-4 py-2 border-2 border-black shadow-[2px_2px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-all cursor-pointer no-underline"
                           >
                             READ MORE
-                          </button>
+                          </a>
                         </div>
                       </div>
                     </div>
@@ -2121,6 +2319,19 @@ export default function App() {
         </div>
       )}
 
+      {routeTransitionLabel && (
+        <div className="auth-route-curtain fixed inset-0 z-[100] bg-[#ffcc00] border-y-4 border-black flex items-center justify-center pointer-events-none">
+          <div className="bg-[#1a1a1a] text-[#ffcc00] border-4 border-black px-8 py-6 shadow-[8px_8px_0px_0px_#0055ff] text-center">
+            <p className="font-mono text-[10px] uppercase font-black tracking-[0.28em] text-white/70 mb-2">
+              {routeTransitionLabel.caption}
+            </p>
+            <p className="font-headline font-black text-4xl md:text-6xl uppercase tracking-tighter">
+              {routeTransitionLabel.label}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* MASTER CONTENT GRID AREA */}
       <main className="flex-grow">
 
@@ -2148,17 +2359,17 @@ export default function App() {
                   <div className="reveal reveal-d5 mt-8 flex flex-wrap gap-4">
                     <button
                       type="button"
-                      onClick={() => openAuth('register')}
+                      onClick={() => navigateWithTransition('/hackathons', 'Hackathons', 'Routing to')}
                       className="bg-[#ffcc00] border-3 border-black px-6 py-3 font-headline font-black text-xs uppercase shadow-[4px_4px_0px_0px_#101010] hover:bg-black hover:text-[#ffcc00] transition-colors cursor-pointer"
                     >
-                      Start Building
+                      Explore Hackathons
                     </button>
                     <button
                       type="button"
-                      onClick={() => openAuth('login')}
+                      onClick={() => openAuth('register')}
                       className="bg-white border-3 border-black px-6 py-3 font-headline font-black text-xs uppercase shadow-[4px_4px_0px_0px_#101010] hover:bg-[#ffcc00] transition-colors cursor-pointer"
                     >
-                      Login to Explore
+                      Start Building
                     </button>
                   </div>
                 </div>
@@ -2296,8 +2507,8 @@ export default function App() {
                       icon: <Search className="w-6 h-6" />,
                       title: 'Global Search',
                       body: 'All hackathons in one place. Filter by tech stack, prize pool, or location with our high-speed indexing engine.',
-                      action: 'Learn More',
-                      onClick: () => openAuth('login'),
+                      action: 'Browse Hackathons',
+                      onClick: () => navigateWithTransition('/hackathons', 'Hackathons', 'Routing to'),
                       color: 'bg-white',
                       iconColor: 'bg-black text-[#ffcc00]',
                       delay: 'reveal-d1',
@@ -2850,7 +3061,43 @@ export default function App() {
         */}
         {false && activeTab === 'explore' && (
           <div>
-            
+
+            {/* Public top nav for unauthenticated visitors */}
+            <header className="sticky top-0 z-40 bg-background border-b-4 border-primary">
+              <div className="max-w-[1440px] mx-auto px-6 py-4 flex items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/')}
+                  className="font-headline font-black text-xl uppercase tracking-tighter text-primary bg-transparent border-none cursor-pointer"
+                >
+                  HackathonFeed
+                </button>
+                <nav className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigateTo('/')}
+                    className="font-mono text-xs font-bold uppercase text-primary/70 hover:text-primary px-3 py-2 cursor-pointer"
+                  >
+                    Home
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openAuth('login')}
+                    className="font-headline font-black text-xs uppercase bg-white text-primary border-2 border-primary px-4 py-2 shadow-[2px_2px_0px_0px_#1a1a1a] hover:bg-primary-container cursor-pointer"
+                  >
+                    Sign in
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openAuth('register')}
+                    className="font-headline font-black text-xs uppercase bg-[#ffcc00] text-primary border-2 border-primary px-4 py-2 shadow-[2px_2px_0px_0px_#1a1a1a] hover:bg-secondary hover:text-white cursor-pointer"
+                  >
+                    Sign up
+                  </button>
+                </nav>
+              </div>
+            </header>
+
             {/* HERO SECTION CONTAINER */}
             <section className="relative bg-primary-container border-b-4 border-primary w-full overflow-hidden bg-grid">
               <div className="max-w-[1440px] mx-auto px-6 py-16 md:py-24 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">

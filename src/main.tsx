@@ -6,12 +6,14 @@ import './index.css';
 
 document.documentElement.style.colorScheme = 'light';
 
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
+const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '').trim();
+
+const tree = (
+  <AuthProvider>
+    <App />
+  </AuthProvider>
+);
 
 createRoot(document.getElementById('root')!).render(
-  <GoogleOAuthProvider clientId={googleClientId}>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
-  </GoogleOAuthProvider>,
+  googleClientId ? <GoogleOAuthProvider clientId={googleClientId}>{tree}</GoogleOAuthProvider> : tree,
 );

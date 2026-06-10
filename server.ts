@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -6,9 +7,223 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://www.hackathonfeed.com';
+const DEFAULT_OG_IMAGE = `${SITE_ORIGIN}/og-image.png`;
+const BACKEND_URL = process.env.BACKEND_URL ?? 'http://0.0.0.0:8000';
+
+type HackathonApi = {
+  id: string;
+  title: string;
+  organizer?: string | null;
+  url?: string | null;
+  thumbnail?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  deadline?: string | null;
+  prize_pool?: string | null;
+  mode?: string | null;
+  location?: string | null;
+  status?: string | null;
+  source_platform?: string | null;
+  categories?: string[];
+  tags?: string[];
+  eligibility?: string[];
+  registrations?: number | null;
+};
+
+type ApiEnvelope<T> = { success: boolean; message?: string; data: T };
+
+async function fetchHackathon(id: string): Promise<HackathonApi | null> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/hackathons/${encodeURIComponent(id)}`);
+    if (!response.ok) return null;
+    const body = (await response.json()) as ApiEnvelope<HackathonApi> | HackathonApi;
+    return 'data' in body ? body.data : (body as HackathonApi);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchAllHackathonsForSitemap(): Promise<HackathonApi[]> {
+  try {
+    const collected: HackathonApi[] = [];
+    let page = 1;
+    while (page < 50) {
+      const resp = await fetch(
+        `${BACKEND_URL}/api/v1/hackathons?page=${page}&page_size=100&only_open=false`,
+      );
+      if (!resp.ok) break;
+      const body = (await resp.json()) as ApiEnvelope<{ items: HackathonApi[]; pages: number }> | {
+        items: HackathonApi[];
+        pages: number;
+      };
+      const payload = 'data' in body ? body.data : body;
+      collected.push(...(payload.items ?? []));
+      if (page >= (payload.pages ?? 1)) break;
+      page += 1;
+    }
+    return collected;
+  } catch {
+    return [];
+  }
+}
+
+function buildEventJsonLd(hack: HackathonApi): Record<string, unknown> {
+  const url = `${SITE_ORIGIN}/h/${hack.id}`;
+  const mode = (hack.mode ?? 'unknown').toLowerCase();
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: hack.title,
+    description: `${hack.title} on ${hack.source_platform ?? 'HackathonFeed'} — ${hack.prize_pool ?? 'prize pool TBD'}.`,
+    startDate: hack.start_date ?? undefined,
+    endDate: hack.end_date ?? hack.deadline ?? undefined,
+    eventStatus:
+      hack.status === 'ended'
+        ? 'https://schema.org/EventCancelled'
+        : 'https://schema.org/EventScheduled',
+    eventAttendanceMode:
+      mode === 'online'
+        ? 'https://schema.org/OnlineEventAttendanceMode'
+        : mode === 'offline'
+          ? 'https://schema.org/OfflineEventAttendanceMode'
+          : 'https://schema.org/MixedEventAttendanceMode',
+    location:
+      mode === 'online'
+        ? { '@type': 'VirtualLocation', url: hack.url ?? url }
+        : {
+            '@type': 'Place',
+            name: hack.location ?? 'Online',
+            address: hack.location ?? 'Online',
+          },
+    organizer: hack.organizer
+      ? { '@type': 'Organization', name: hack.organizer }
+      : undefined,
+    image: hack.thumbnail ?? DEFAULT_OG_IMAGE,
+    url,
+  };
+}
+
+type RouteSeo = {
+  title: string;
+  description: string;
+  canonical: string;
+  ogImage?: string;
+  robots?: string;
+};
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function seoForPath(pathname: string): RouteSeo {
+  const canonical = `${SITE_ORIGIN}${pathname === '/' ? '/' : pathname.replace(/\/$/, '')}`;
+
+  if (pathname === '/' || pathname === '') {
+    return {
+      title: 'HackathonFeed | Discover, Track, and Win Hackathons',
+      description:
+        'HackathonFeed helps builders discover active hackathons, track applications, explore winning projects, and use an AI copilot to plan stronger submissions.',
+      canonical: `${SITE_ORIGIN}/`,
+    };
+  }
+
+  if (pathname === '/hackathons' || pathname === '/explore') {
+    return {
+      title: 'Browse Hackathons — HackathonFeed',
+      description:
+        'Search and filter hundreds of active hackathons from Devfolio, Devpost, ETHGlobal, and more. Find online, in-person, AI, Web3, and student events with prize pools.',
+      canonical: `${SITE_ORIGIN}/hackathons`,
+    };
+  }
+
+  if (pathname === '/login') {
+    return {
+      title: 'Sign in to HackathonFeed',
+      description: 'Sign in to track hackathon applications, save events, and access your AI copilot.',
+      canonical: `${SITE_ORIGIN}/login`,
+      robots: 'noindex, follow',
+    };
+  }
+
+  if (pathname === '/signup') {
+    return {
+      title: 'Create your HackathonFeed account',
+      description: 'Create a free HackathonFeed account to discover hackathons, track applications, and validate ideas with AI.',
+      canonical: `${SITE_ORIGIN}/signup`,
+      robots: 'noindex, follow',
+    };
+  }
+
+  const profileMatch = pathname.match(/^\/u\/([a-zA-Z0-9_-]{3,30})\/?$/);
+  if (profileMatch) {
+    const username = profileMatch[1];
+    return {
+      title: `@${username} on HackathonFeed`,
+      description: `Public hackathon profile for @${username} — projects, hackathons, and submissions on HackathonFeed.`,
+      canonical: `${SITE_ORIGIN}/u/${username}`,
+    };
+  }
+
+  return {
+    title: 'HackathonFeed | Discover, Track, and Win Hackathons',
+    description:
+      'HackathonFeed helps builders discover active hackathons, track applications, explore winning projects, and use an AI copilot to plan stronger submissions.',
+    canonical: `${SITE_ORIGIN}${pathname}`,
+    robots: 'noindex, follow',
+  };
+}
+
+async function injectSeo(html: string, pathname: string): Promise<string> {
+  const hackathonMatch = pathname.match(/^\/h\/([a-zA-Z0-9_-]+)\/?$/);
+  if (hackathonMatch) {
+    const hack = await fetchHackathon(hackathonMatch[1]);
+    if (hack) {
+      const seo: RouteSeo = {
+        title: `${hack.title}${hack.prize_pool ? ` — ${hack.prize_pool} Prize Pool` : ''} | HackathonFeed`,
+        description: `${hack.title} on ${hack.source_platform ?? 'HackathonFeed'}. ${hack.organizer ? `Organized by ${hack.organizer}. ` : ''}${hack.prize_pool ?? ''} ${hack.deadline ? `Deadline: ${hack.deadline}.` : ''}`.trim(),
+        canonical: `${SITE_ORIGIN}/h/${hack.id}`,
+        ogImage: hack.thumbnail ?? DEFAULT_OG_IMAGE,
+      };
+      let next = applySeoTags(html, seo);
+      const jsonLd = `<script type="application/ld+json" id="hackathon-event-jsonld">${JSON.stringify(buildEventJsonLd(hack))}</script>`;
+      next = next.replace('</head>', `${jsonLd}</head>`);
+      return next;
+    }
+  }
+
+  return applySeoTags(html, seoForPath(pathname));
+}
+
+function applySeoTags(html: string, seo: RouteSeo): string {
+  const title = escapeHtml(seo.title);
+  const description = escapeHtml(seo.description);
+  const canonical = escapeHtml(seo.canonical);
+  const ogImage = escapeHtml(seo.ogImage ?? DEFAULT_OG_IMAGE);
+  const robots = escapeHtml(seo.robots ?? 'index, follow');
+
+  let next = html;
+  next = next.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
+  next = next.replace(/<meta\s+name="description"[^>]*>/, `<meta name="description" content="${description}" />`);
+  next = next.replace(/<meta\s+name="robots"[^>]*>/, `<meta name="robots" content="${robots}" />`);
+  next = next.replace(/<link\s+rel="canonical"[^>]*>/, `<link rel="canonical" href="${canonical}" />`);
+  next = next.replace(/<meta\s+property="og:title"[^>]*>/, `<meta property="og:title" content="${title}" />`);
+  next = next.replace(/<meta\s+property="og:description"[^>]*>/, `<meta property="og:description" content="${description}" />`);
+  next = next.replace(/<meta\s+property="og:url"[^>]*>/, `<meta property="og:url" content="${canonical}" />`);
+  next = next.replace(/<meta\s+property="og:image"[^>]*>/, `<meta property="og:image" content="${ogImage}" />`);
+  next = next.replace(/<meta\s+name="twitter:title"[^>]*>/, `<meta name="twitter:title" content="${title}" />`);
+  next = next.replace(/<meta\s+name="twitter:description"[^>]*>/, `<meta name="twitter:description" content="${description}" />`);
+  next = next.replace(/<meta\s+name="twitter:image"[^>]*>/, `<meta name="twitter:image" content="${ogImage}" />`);
+  return next;
+}
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://0.0.0.0:8000';
 
 function readRawBody(req: express.Request): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -230,23 +445,84 @@ Analyze the project detail strictly and provide a structured JSON response evalu
   }
 });
 
+let sitemapCache: { xml: string; expires: number } | null = null;
+const SITEMAP_TTL_MS = 10 * 60 * 1000;
+
+app.get('/sitemap.xml', async (_req, res) => {
+  try {
+    if (sitemapCache && sitemapCache.expires > Date.now()) {
+      res.type('application/xml').send(sitemapCache.xml);
+      return;
+    }
+    const hackathons = await fetchAllHackathonsForSitemap();
+    const urls = [
+      { loc: `${SITE_ORIGIN}/`, changefreq: 'daily', priority: '1.0' },
+      { loc: `${SITE_ORIGIN}/hackathons`, changefreq: 'daily', priority: '0.9' },
+      ...hackathons.map((h) => ({
+        loc: `${SITE_ORIGIN}/h/${h.id}`,
+        changefreq: 'weekly',
+        priority: '0.7',
+        lastmod: h.deadline ?? h.end_date ?? undefined,
+      })),
+    ];
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls
+  .map(
+    (u) =>
+      `  <url>\n    <loc>${escapeHtml(u.loc)}</loc>\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>${(u as any).lastmod ? `\n    <lastmod>${escapeHtml(String((u as any).lastmod))}</lastmod>` : ''}\n  </url>`,
+  )
+  .join('\n')}
+</urlset>`;
+    sitemapCache = { xml, expires: Date.now() + SITEMAP_TTL_MS };
+    res.type('application/xml').send(xml);
+  } catch (error) {
+    console.error('Sitemap generation error:', error);
+    res.status(500).type('text/plain').send('Sitemap generation failed.');
+  }
+});
+
 // Vite middleware & Client serving setup
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa',
+      appType: 'custom',
     });
     app.use(vite.middlewares);
+    app.use(async (req, res, next) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+      if (
+        req.path.startsWith('/api/') ||
+        req.path.startsWith('/uploads') ||
+        req.path === '/health' ||
+        /\.[a-zA-Z0-9]+$/.test(req.path)
+      ) {
+        return next();
+      }
+      try {
+        const templatePath = path.join(process.cwd(), 'index.html');
+        let template = fs.readFileSync(templatePath, 'utf-8');
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        const html = await injectSeo(template, req.path);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+      } catch (err) {
+        vite.ssrFixStacktrace(err as Error);
+        next(err);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res, next) => {
+    const indexPath = path.join(distPath, 'index.html');
+    const indexTemplate = fs.readFileSync(indexPath, 'utf-8');
+    app.use(express.static(distPath, { index: false }));
+    app.get('*', async (req, res, next) => {
       if (req.path.startsWith('/api/') || req.path === '/health' || req.path.startsWith('/uploads')) {
         next();
         return;
       }
-      res.sendFile(path.join(distPath, 'index.html'));
+      const html = await injectSeo(indexTemplate, req.path);
+      res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
     });
   }
 
