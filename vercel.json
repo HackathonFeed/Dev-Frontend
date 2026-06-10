@@ -4,6 +4,11 @@
   "installCommand": "npm ci",
   "buildCommand": "vite build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/page.ts": {
+      "includeFiles": "dist/index.html"
+    }
+  },
   "rewrites": [
     {
       "source": "/api/v1/:path*",
@@ -18,7 +23,39 @@
       "destination": "https://dev-backend-rho.vercel.app/health"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    },
+    {
+      "source": "/",
+      "destination": "/api/page"
+    },
+    {
+      "source": "/hackathons",
+      "destination": "/api/page"
+    },
+    {
+      "source": "/explore",
+      "destination": "/api/page"
+    },
+    {
+      "source": "/login",
+      "destination": "/api/page"
+    },
+    {
+      "source": "/signup",
+      "destination": "/api/page"
+    },
+    {
+      "source": "/h/:id",
+      "destination": "/api/page"
+    },
+    {
+      "source": "/u/:user",
+      "destination": "/api/page"
+    },
+    {
+      "source": "/((?!api/|assets/|favicon|og-image|robots|manifest|site\\.webmanifest).*)",
       "destination": "/index.html"
     }
   ],
