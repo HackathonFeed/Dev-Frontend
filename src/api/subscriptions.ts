@@ -1,6 +1,7 @@
 import { apiRequest } from './client';
 import type {
   CreateOrderResponse,
+  PaymentPageResponse,
   PlanInfo,
   SubscriptionPlan,
   SubscriptionStatus,
@@ -22,15 +23,33 @@ export async function consumeProjectView(): Promise<SubscriptionStatus> {
   });
 }
 
-/** @deprecated – direct upgrade without payment, kept for internal use only */
-export async function upgradePlan(plan: SubscriptionPlan): Promise<SubscriptionStatus> {
-  return apiRequest<SubscriptionStatus>('/subscriptions/upgrade', {
-    method: 'POST',
-    body: JSON.stringify({ plan }),
-  });
+/** Razorpay Payment Page URL with email pre-filled. */
+export async function getPaymentPage(plan: SubscriptionPlan): Promise<PaymentPageResponse> {
+  return apiRequest<PaymentPageResponse>(`/subscriptions/payment-page/${plan}`);
 }
 
-/** Step 1: Create a Razorpay order. Returns order_id + publishable key. */
+/** Poll until webhook upgrades the user to the expected plan. */
+export async function waitForPlanUpgrade(
+  expectedPlan: SubscriptionPlan,
+  options?: { maxAttempts?: number; intervalMs?: number },
+): Promise<SubscriptionStatus> {
+  const maxAttempts = options?.maxAttempts ?? 20;
+  const intervalMs = options?.intervalMs ?? 3000;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const status = await getMySubscription();
+    if (status.plan === expectedPlan) {
+      return status;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error(
+    'Payment received — your plan may take a minute to activate. Refresh the page or check your email.',
+  );
+}
+
+/** @deprecated – legacy embedded Razorpay Checkout */
 export async function createOrder(plan: SubscriptionPlan): Promise<CreateOrderResponse> {
   return apiRequest<CreateOrderResponse>('/subscriptions/create-order', {
     method: 'POST',
@@ -38,7 +57,7 @@ export async function createOrder(plan: SubscriptionPlan): Promise<CreateOrderRe
   });
 }
 
-/** Step 2: Verify the Razorpay payment signature and apply the plan upgrade. */
+/** @deprecated – legacy embedded Razorpay Checkout */
 export async function verifyPayment(payload: VerifyPaymentRequest): Promise<SubscriptionStatus> {
   return apiRequest<SubscriptionStatus>('/subscriptions/verify-payment', {
     method: 'POST',

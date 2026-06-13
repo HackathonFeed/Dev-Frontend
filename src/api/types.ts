@@ -48,6 +48,15 @@ export interface PlanInfo {
   points: number;
   messages_per_cycle: string;
   features: string[];
+  payment_page_url?: string | null;
+}
+
+export interface PaymentPageResponse {
+  plan: SubscriptionPlan;
+  plan_name: string;
+  price_inr: number;
+  payment_page_url: string;
+  checkout_note: string;
 }
 
 export interface CreateOrderResponse {

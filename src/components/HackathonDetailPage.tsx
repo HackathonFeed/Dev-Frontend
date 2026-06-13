@@ -207,54 +207,76 @@ export const HackathonDetailPage: React.FC<HackathonDetailPageProps> = ({
         </div>
       </header>
 
-      <article className="max-w-[1100px] mx-auto px-6 mt-6">
-        {thumbnail && (
-          <div className="border-4 border-black bg-zinc-900 aspect-[21/9] overflow-hidden mb-6 shadow-[8px_8px_0px_0px_#ffcc00]">
-            <img
-              src={thumbnail}
-              alt={data.title}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-              width={1200}
-              height={514}
-            />
+      <article className="max-w-[1200px] mx-auto px-6 mt-6">
+        {/* Hero: title block + thumbnail side by side on desktop, stacked on mobile */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-stretch">
+          <div className="lg:col-span-7 bg-white border-4 border-black p-6 md:p-8 shadow-[8px_8px_0px_0px_#1a1a1a] flex flex-col gap-5">
+            <div className="flex flex-wrap gap-2">
+              <span
+                className={`font-mono text-[10px] uppercase font-bold px-2 py-1 border-2 border-black ${getStatusBadgeClass(data.status)} border-black`}
+              >
+                {getHackathonStatusLabel(data)}
+              </span>
+              <span className="font-mono text-[10px] uppercase font-bold px-2 py-1 border-2 border-black bg-white">
+                {data.mode}
+              </span>
+              <span className="font-mono text-[10px] uppercase font-bold px-2 py-1 border-2 border-black bg-[#0055ff] text-white">
+                {data.source_platform}
+              </span>
+            </div>
+
+            <h1 className="font-headline font-black text-3xl md:text-4xl xl:text-5xl uppercase tracking-tight text-[#1a1a1a] leading-[0.95]">
+              {data.title}
+            </h1>
+
+            {data.organizer && (
+              <p className="font-mono text-xs uppercase font-bold text-zinc-500 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5" />
+                {data.organizer}
+              </p>
+            )}
+
+            <div className="mt-auto pt-4 border-t-2 border-dashed border-zinc-200 flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="font-mono text-[10px] uppercase text-zinc-500 font-bold mb-1">Prize pool</p>
+                <p className="font-headline font-black text-3xl md:text-4xl text-[#0055ff] leading-none">
+                  {data.prize_pool || 'TBD'}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-zinc-500 font-mono text-[10px]">
+                {data.deadline && (
+                  <span className="flex items-center gap-1 uppercase font-bold bg-[#f5f0e8] border-2 border-black px-2 py-1">
+                    <Calendar className="w-3.5 h-3.5" /> Due {formatDate(data.deadline)}
+                  </span>
+                )}
+                {mapped.location && (
+                  <span className="flex items-center gap-1 uppercase font-bold bg-[#f5f0e8] border-2 border-black px-2 py-1">
+                    <MapPin className="w-3.5 h-3.5" /> {mapped.location}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-        )}
+
+          {thumbnail ? (
+            <div className="lg:col-span-5 border-4 border-black bg-zinc-900 aspect-[4/3] lg:aspect-auto overflow-hidden shadow-[8px_8px_0px_0px_#ffcc00] min-h-[260px]">
+              <img
+                src={thumbnail}
+                alt={data.title}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+                width={800}
+                height={600}
+              />
+            </div>
+          ) : (
+            <div className="lg:col-span-5 border-4 border-black bg-[#ffcc00] aspect-[4/3] lg:aspect-auto shadow-[8px_8px_0px_0px_#1a1a1a] min-h-[260px] flex items-center justify-center">
+              <Trophy className="w-24 h-24 text-[#1a1a1a]" strokeWidth={1.5} />
+            </div>
+          )}
+        </div>
 
         <div className="bg-white border-4 border-black p-6 md:p-10 shadow-[8px_8px_0px_0px_#1a1a1a] space-y-6">
-          <div className="flex flex-wrap gap-2">
-            <span
-              className={`font-mono text-[10px] uppercase font-bold px-2 py-1 border-2 border-black ${getStatusBadgeClass(data.status)} border-black`}
-            >
-              {getHackathonStatusLabel(data)}
-            </span>
-            <span className="font-mono text-[10px] uppercase font-bold px-2 py-1 border-2 border-black bg-white">
-              {data.mode}
-            </span>
-            <span className="font-mono text-[10px] uppercase font-bold px-2 py-1 border-2 border-black bg-[#0055ff] text-white">
-              {data.source_platform}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-2 flex-1 min-w-0">
-              <h1 className="font-headline font-black text-3xl md:text-5xl uppercase tracking-tight text-[#1a1a1a] leading-tight">
-                {data.title}
-              </h1>
-              {data.organizer && (
-                <p className="font-mono text-xs uppercase font-bold text-zinc-500 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5" />
-                  {data.organizer}
-                </p>
-              )}
-            </div>
-            <div className="text-right shrink-0">
-              <p className="font-mono text-[10px] uppercase text-zinc-500 font-bold">Prize pool</p>
-              <p className="font-headline font-black text-2xl md:text-4xl text-[#0055ff]">
-                {data.prize_pool || 'TBD'}
-              </p>
-            </div>
-          </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[

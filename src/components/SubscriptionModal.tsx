@@ -1,53 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { X, Check, Zap, Crown, Rocket, Loader2, IndianRupee } from 'lucide-react';
+import { X, Check, Zap, Crown, Rocket, Loader2, ExternalLink } from 'lucide-react';
 import type { PlanInfo, SubscriptionPlan, SubscriptionStatus } from '../api/types';
-import { getPlans, createOrder, verifyPayment } from '../api/subscriptions';
-
-// ── Razorpay global type ──────────────────────────────────────────────────────
-interface RazorpayOptions {
-  key: string;
-  amount: number;
-  currency: string;
-  order_id: string;
-  name: string;
-  description: string;
-  image?: string;
-  prefill?: { name?: string; email?: string };
-  theme?: { color?: string };
-  handler: (response: RazorpayPaymentResponse) => void;
-  modal?: { ondismiss?: () => void };
-}
-
-interface RazorpayPaymentResponse {
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
-  razorpay_signature: string;
-}
-
-declare global {
-  interface Window {
-    Razorpay: new (options: RazorpayOptions) => { open: () => void };
-  }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function loadRazorpayScript(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (window.Razorpay) { resolve(); return; }
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Razorpay checkout.'));
-    document.head.appendChild(script);
-  });
-}
-
-function formatInr(paise: number): string {
-  const rupees = paise / 100;
-  return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(rupees);
-}
-
-// ── Component ─────────────────────────────────────────────────────────────────
+import { getPlans, getPaymentPage, waitForPlanUpgrade } from '../api/subscriptions';
 
 interface SubscriptionModalProps {
   open: boolean;
@@ -111,12 +65,12 @@ export function SubscriptionModal({
   onClose,
   currentStatus,
   userEmail,
-  userName,
   onUpgradeSuccess,
 }: SubscriptionModalProps) {
   const [plans, setPlans] = useState<PlanInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<SubscriptionPlan | null>(null);
+  const [waitingPlan, setWaitingPlan] = useState<SubscriptionPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successPlan, setSuccessPlan] = useState<SubscriptionPlan | null>(null);
 
@@ -125,6 +79,7 @@ export function SubscriptionModal({
     setLoading(true);
     setError(null);
     setSuccessPlan(null);
+    setWaitingPlan(null);
     getPlans()
       .then(setPlans)
       .catch(() => setError('Failed to load plans. Please try again.'))
@@ -133,10 +88,10 @@ export function SubscriptionModal({
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !waitingPlan) onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, onClose, waitingPlan]);
 
   if (!open) return null;
 
@@ -151,60 +106,40 @@ export function SubscriptionModal({
   })();
 
   const handleUpgrade = async (plan: SubscriptionPlan) => {
-    if (upgrading) return;
+    if (upgrading || waitingPlan) return;
     setUpgrading(plan);
     setError(null);
 
     try {
-      // ── Step 1: Get a Razorpay order from the backend ────────────────────
-      const order = await createOrder(plan);
+      const page = await getPaymentPage(plan);
+      const paymentWindow = window.open(page.payment_page_url, '_blank', 'noopener,noreferrer');
 
-      // ── Step 2: Load Razorpay checkout script ────────────────────────────
-      await loadRazorpayScript();
+      if (!paymentWindow) {
+        throw new Error('Pop-up blocked. Allow pop-ups for this site and try again.');
+      }
 
-      // ── Step 3: Open Razorpay Checkout ───────────────────────────────────
-      const rzp = new window.Razorpay({
-        key: order.key_id,
-        amount: order.amount,
-        currency: order.currency,
-        order_id: order.order_id,
-        name: 'HackathonFeed',
-        description: `${order.plan_name} Plan — Monthly`,
-        prefill: {
-          name: userName ?? undefined,
-          email: userEmail ?? undefined,
-        },
-        theme: { color: '#0055ff' },
-        handler: async (response: RazorpayPaymentResponse) => {
-          // ── Step 4: Verify signature & upgrade plan ──────────────────────
-          try {
-            const status = await verifyPayment({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              plan,
-            });
-            setSuccessPlan(plan);
-            onUpgradeSuccess(status);
-            setTimeout(() => { setSuccessPlan(null); onClose(); }, 2000);
-          } catch (verifyErr) {
-            setError('Payment received but verification failed. Contact support with your payment ID.');
-          } finally {
-            setUpgrading(null);
-          }
-        },
-        modal: {
-          ondismiss: () => setUpgrading(null),
-        },
-      });
+      setUpgrading(null);
+      setWaitingPlan(plan);
 
-      rzp.open();
-      // NOTE: do NOT setUpgrading(null) here — the handler / ondismiss will do it
+      const status = await waitForPlanUpgrade(plan);
+      setWaitingPlan(null);
+      setSuccessPlan(plan);
+      onUpgradeSuccess(status);
+      setTimeout(() => {
+        setSuccessPlan(null);
+        onClose();
+      }, 2000);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not initiate payment. Please try again.';
+      setWaitingPlan(null);
+      const msg = err instanceof Error ? err.message : 'Could not complete payment. Please try again.';
       setError(msg);
       setUpgrading(null);
     }
+  };
+
+  const payButtonLabel = (plan: PlanInfo) => {
+    if (plan.key === 'champion') return `PAY ₹${plan.price_inr} · LIFETIME`;
+    return `PAY ₹${plan.price_inr} · UPGRADE`;
   };
 
   return (
@@ -214,13 +149,10 @@ export function SubscriptionModal({
       aria-modal="true"
       aria-label="Subscription Plans"
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px]" onClick={waitingPlan ? undefined : onClose} />
 
-      {/* Modal Panel */}
       <div className="relative z-10 w-full max-w-4xl max-h-[92vh] overflow-y-auto bg-[#f5f0e8] border-4 border-black shadow-[12px_12px_0px_0px_#101010] animate-fadeIn">
 
-        {/* ── Header ── */}
         <div className="bg-[#1a1a1a] border-b-4 border-black px-6 py-5 flex items-start justify-between gap-4">
           <div>
             <p className="font-mono text-[10px] uppercase font-bold tracking-[0.22em] text-[#ffcc00] mb-1">
@@ -230,19 +162,19 @@ export function SubscriptionModal({
               CHOOSE YOUR PLAN
             </h2>
             <p className="mt-1.5 font-mono text-[11px] text-white/45">
-              Each AI chat message costs 5 points · Powered by Razorpay
+              Each AI chat message costs 5 points · Pay securely on Razorpay
             </p>
           </div>
           <button
             onClick={onClose}
-            className="mt-1 shrink-0 bg-white/10 hover:bg-[#e63b2e] border-2 border-white/20 hover:border-[#e63b2e] p-1.5 transition-colors cursor-pointer"
+            disabled={!!waitingPlan}
+            className="mt-1 shrink-0 bg-white/10 hover:bg-[#e63b2e] border-2 border-white/20 hover:border-[#e63b2e] p-1.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label="Close"
           >
             <X className="w-4 h-4 text-white" strokeWidth={3} />
           </button>
         </div>
 
-        {/* ── Current status bar ── */}
         {currentStatus && (
           <div className="border-b-4 border-black bg-white px-6 py-4 flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
@@ -281,7 +213,20 @@ export function SubscriptionModal({
           </div>
         )}
 
-        {/* ── Error / Success banners ── */}
+        {waitingPlan && (
+          <div className="mx-6 mt-4 px-4 py-4 bg-[#0055ff] border-2 border-black text-white">
+            <div className="flex items-center gap-3 mb-2">
+              <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+              <p className="font-headline font-black text-sm uppercase">Waiting for payment…</p>
+            </div>
+            <p className="font-mono text-[10px] uppercase font-bold leading-relaxed text-white/85">
+              Complete payment in the Razorpay tab. Use{' '}
+              <span className="text-[#ffcc00]">{userEmail ?? 'your HackathonFeed email'}</span>{' '}
+              on the payment page so we can activate your plan automatically.
+            </p>
+          </div>
+        )}
+
         {error && (
           <div className="mx-6 mt-4 px-4 py-3 bg-[#e63b2e] border-2 border-black font-mono text-xs text-white font-bold uppercase">
             ⚠ {error}
@@ -290,11 +235,10 @@ export function SubscriptionModal({
         {successPlan && (
           <div className="mx-6 mt-4 px-4 py-3 bg-[#0055ff] border-2 border-black font-mono text-xs text-white font-bold uppercase flex items-center gap-2">
             <Check className="w-4 h-4" strokeWidth={3} />
-            Plan upgraded to {successPlan.toUpperCase()}! Refreshing…
+            Plan upgraded to {successPlan.toUpperCase()}!
           </div>
         )}
 
-        {/* ── Plan cards ── */}
         <div className="p-6">
           {loading ? (
             <div className="flex items-center justify-center py-16 gap-3">
@@ -306,23 +250,22 @@ export function SubscriptionModal({
               {plans.map((plan) => {
                 const styles = CARD_STYLES[plan.key];
                 const isCurrent = plan.key === currentPlan;
-                const isUpgrading = upgrading === plan.key;
+                const isBusy = upgrading === plan.key || waitingPlan === plan.key;
                 const isDowngrade = PLAN_ORDER[plan.key] < PLAN_ORDER[currentPlan];
                 const isFree = plan.price_inr === 0;
+                const hasPaymentPage = Boolean(plan.payment_page_url);
 
                 return (
                   <div
                     key={plan.key}
                     className={`relative border-4 border-black ${styles.card} p-6 flex flex-col gap-4 shadow-[6px_6px_0px_0px_#101010] ${isCurrent ? 'ring-4 ring-[#ffcc00] ring-offset-0' : ''}`}
                   >
-                    {/* Popular badge */}
                     {plan.key === 'builder' && (
                       <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#ffcc00] border-2 border-black px-3 py-0.5 font-mono text-[9px] uppercase font-black tracking-widest text-[#1a1a1a] whitespace-nowrap z-10 shadow-[2px_2px_0px_0px_#101010]">
                         MOST POPULAR
                       </div>
                     )}
 
-                    {/* Plan name + badge */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className={styles.text}>{PLAN_ICONS[plan.key]}</span>
@@ -335,7 +278,6 @@ export function SubscriptionModal({
                       </span>
                     </div>
 
-                    {/* Points */}
                     <div className={`border-t-2 ${styles.divider} pt-3`}>
                       <p className={`font-headline font-black text-3xl tracking-tighter ${styles.text}`}>
                         {plan.points === -1 ? '∞ UNLIMITED' : `${plan.points.toLocaleString()} PTS`}
@@ -345,7 +287,6 @@ export function SubscriptionModal({
                       </p>
                     </div>
 
-                    {/* Features */}
                     <ul className="flex flex-col gap-1.5 flex-1">
                       {plan.features.map((feat, i) => (
                         <li key={i} className="flex items-start gap-2">
@@ -357,17 +298,18 @@ export function SubscriptionModal({
                       ))}
                     </ul>
 
-                    {/* CTA */}
                     <button
                       type="button"
-                      disabled={isCurrent || !!upgrading || isDowngrade}
-                      onClick={() => handleUpgrade(plan.key)}
+                      disabled={isCurrent || !!upgrading || !!waitingPlan || isDowngrade || (!isFree && !hasPaymentPage)}
+                      onClick={() => !isFree && handleUpgrade(plan.key)}
                       className={`w-full py-3 px-4 border-3 border-black font-headline font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
                         isCurrent
                           ? 'bg-[#ffcc00] text-[#1a1a1a] cursor-default shadow-[3px_3px_0px_0px_#1a1a1a]'
                           : isDowngrade
                             ? 'bg-zinc-200 text-zinc-400 border-zinc-300 cursor-not-allowed'
-                            : upgrading
+                            : !isFree && !hasPaymentPage
+                              ? 'bg-zinc-200 text-zinc-400 border-zinc-300 cursor-not-allowed'
+                            : isBusy
                               ? 'opacity-50 cursor-wait'
                               : plan.key === 'champion'
                                 ? 'bg-[#e63b2e] text-white hover:bg-white hover:text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a] cursor-pointer'
@@ -376,10 +318,10 @@ export function SubscriptionModal({
                                   : 'bg-[#1a1a1a] text-white hover:bg-[#ffcc00] hover:text-[#1a1a1a] shadow-[3px_3px_0px_0px_#1a1a1a] cursor-pointer'
                       }`}
                     >
-                      {isUpgrading ? (
+                      {isBusy ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          OPENING CHECKOUT…
+                          {waitingPlan === plan.key ? 'CONFIRMING PAYMENT…' : 'OPENING PAYMENT…'}
                         </>
                       ) : isCurrent ? (
                         <>
@@ -390,12 +332,12 @@ export function SubscriptionModal({
                         'DOWNGRADE NOT AVAILABLE'
                       ) : isFree ? (
                         'FREE — NO PAYMENT'
+                      ) : !hasPaymentPage ? (
+                        'COMING SOON'
                       ) : (
                         <>
-                          <IndianRupee className="w-3.5 h-3.5" strokeWidth={3} />
-                          {plan.key === 'champion'
-                            ? `PAY ₹${plan.price_inr} · LIFETIME`
-                            : `PAY ₹${plan.price_inr} · GET 200 CREDITS`}
+                          <ExternalLink className="w-3.5 h-3.5" strokeWidth={3} />
+                          {payButtonLabel(plan)}
                         </>
                       )}
                     </button>
@@ -406,10 +348,9 @@ export function SubscriptionModal({
           )}
         </div>
 
-        {/* ── Footer ── */}
         <div className="border-t-4 border-black bg-[#1a1a1a] px-6 py-4">
           <p className="font-mono text-[9px] uppercase font-bold text-white/35 text-center">
-            Payments secured by Razorpay · Plans activate instantly after payment · Monthly billing
+            Pay on Razorpay · Use your HackathonFeed email · Plan activates automatically after payment
           </p>
         </div>
       </div>
