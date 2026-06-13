@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { ApiError, apiRequest } from './client';
 import type {
   CreateOrderResponse,
   PaymentPageResponse,
@@ -28,19 +28,36 @@ export async function getPaymentPage(plan: SubscriptionPlan): Promise<PaymentPag
   return apiRequest<PaymentPageResponse>(`/subscriptions/payment-page/${plan}`);
 }
 
-/** Poll until webhook upgrades the user to the expected plan. */
+/** Verify payment with Razorpay API and apply plan upgrade for the logged-in user. */
+export async function claimPlanUpgrade(plan: SubscriptionPlan): Promise<SubscriptionStatus> {
+  return apiRequest<SubscriptionStatus>('/subscriptions/claim-upgrade', {
+    method: 'POST',
+    body: JSON.stringify({ plan }),
+  });
+}
+
+/** Poll until plan upgrades after Payment Page checkout. */
 export async function waitForPlanUpgrade(
   expectedPlan: SubscriptionPlan,
   options?: { maxAttempts?: number; intervalMs?: number },
 ): Promise<SubscriptionStatus> {
-  const maxAttempts = options?.maxAttempts ?? 20;
-  const intervalMs = options?.intervalMs ?? 3000;
+  const maxAttempts = options?.maxAttempts ?? 30;
+  const intervalMs = options?.intervalMs ?? 2000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await claimPlanUpgrade(expectedPlan);
+    } catch (err) {
+      if (!(err instanceof ApiError) || (err.status !== 404 && err.status !== 503)) {
+        throw err;
+      }
+    }
+
     const status = await getMySubscription();
     if (status.plan === expectedPlan) {
       return status;
     }
+
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
