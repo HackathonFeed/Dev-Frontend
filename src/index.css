@@ -198,6 +198,91 @@ body {
   }
 }
 
+@keyframes upgrade-check-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-12deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.08) rotate(3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes upgrade-success-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes upgrade-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes upgrade-pulse-ring {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 85, 255, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(0, 85, 255, 0);
+  }
+}
+
+@keyframes upgrade-confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(-20vh) rotate(0deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(110vh) rotate(540deg);
+  }
+}
+
+.upgrade-success-card {
+  animation: upgrade-card-enter 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.upgrade-check-pop {
+  animation: upgrade-check-pop 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.upgrade-success-content {
+  animation: upgrade-success-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
+
+.upgrade-pulse-ring {
+  animation: upgrade-pulse-ring 1.6s ease-in-out infinite;
+}
+
+.upgrade-confetti-piece {
+  position: absolute;
+  top: -12px;
+  width: 10px;
+  height: 18px;
+  border: 2px solid #1a1a1a;
+  animation: upgrade-confetti-fall 2.8s ease-in forwards;
+}
+
 .auth-route-curtain {
   animation: auth-curtain-in 0.68s cubic-bezier(0.85, 0, 0.15, 1) both;
 }

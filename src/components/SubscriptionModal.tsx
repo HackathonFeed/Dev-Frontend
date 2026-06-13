@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Zap, Crown, Rocket, Loader2, ExternalLink } from 'lucide-react';
 import type { PlanInfo, SubscriptionPlan, SubscriptionStatus } from '../api/types';
-import { getPlans, getPaymentPage, waitForPlanUpgrade } from '../api/subscriptions';
+import { getPlans, getPaymentPage } from '../api/subscriptions';
+import { savePendingUpgrade } from '../lib/billingRedirect';
 
 interface SubscriptionModalProps {
   open: boolean;
@@ -65,21 +66,16 @@ export function SubscriptionModal({
   onClose,
   currentStatus,
   userEmail,
-  onUpgradeSuccess,
 }: SubscriptionModalProps) {
   const [plans, setPlans] = useState<PlanInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<SubscriptionPlan | null>(null);
-  const [waitingPlan, setWaitingPlan] = useState<SubscriptionPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [successPlan, setSuccessPlan] = useState<SubscriptionPlan | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
     setError(null);
-    setSuccessPlan(null);
-    setWaitingPlan(null);
     getPlans()
       .then(setPlans)
       .catch(() => setError('Failed to load plans. Please try again.'))
@@ -88,10 +84,10 @@ export function SubscriptionModal({
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !waitingPlan) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !upgrading) onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose, waitingPlan]);
+  }, [open, onClose, upgrading]);
 
   if (!open) return null;
 
@@ -106,32 +102,16 @@ export function SubscriptionModal({
   })();
 
   const handleUpgrade = async (plan: SubscriptionPlan) => {
-    if (upgrading || waitingPlan) return;
+    if (upgrading) return;
     setUpgrading(plan);
     setError(null);
 
     try {
       const page = await getPaymentPage(plan);
-      const paymentWindow = window.open(page.payment_page_url, '_blank', 'noopener,noreferrer');
-
-      if (!paymentWindow) {
-        throw new Error('Pop-up blocked. Allow pop-ups for this site and try again.');
-      }
-
-      setUpgrading(null);
-      setWaitingPlan(plan);
-
-      const status = await waitForPlanUpgrade(plan);
-      setWaitingPlan(null);
-      setSuccessPlan(plan);
-      onUpgradeSuccess(status);
-      setTimeout(() => {
-        setSuccessPlan(null);
-        onClose();
-      }, 2000);
+      savePendingUpgrade(plan);
+      window.location.assign(page.payment_page_url);
     } catch (err) {
-      setWaitingPlan(null);
-      const msg = err instanceof Error ? err.message : 'Could not complete payment. Please try again.';
+      const msg = err instanceof Error ? err.message : 'Could not open payment page. Please try again.';
       setError(msg);
       setUpgrading(null);
     }
@@ -149,7 +129,7 @@ export function SubscriptionModal({
       aria-modal="true"
       aria-label="Subscription Plans"
     >
-      <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px]" onClick={waitingPlan ? undefined : onClose} />
+      <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px]" onClick={upgrading ? undefined : onClose} />
 
       <div className="relative z-10 w-full max-w-4xl max-h-[92vh] overflow-y-auto bg-[#f5f0e8] border-4 border-black shadow-[12px_12px_0px_0px_#101010] animate-fadeIn">
 
@@ -167,7 +147,7 @@ export function SubscriptionModal({
           </div>
           <button
             onClick={onClose}
-            disabled={!!waitingPlan}
+            disabled={!!upgrading}
             className="mt-1 shrink-0 bg-white/10 hover:bg-[#e63b2e] border-2 border-white/20 hover:border-[#e63b2e] p-1.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label="Close"
           >
@@ -213,29 +193,9 @@ export function SubscriptionModal({
           </div>
         )}
 
-        {waitingPlan && (
-          <div className="mx-6 mt-4 px-4 py-4 bg-[#0055ff] border-2 border-black text-white">
-            <div className="flex items-center gap-3 mb-2">
-              <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-              <p className="font-headline font-black text-sm uppercase">Waiting for payment…</p>
-            </div>
-            <p className="font-mono text-[10px] uppercase font-bold leading-relaxed text-white/85">
-              Complete payment in the Razorpay tab. Use{' '}
-              <span className="text-[#ffcc00]">{userEmail ?? 'your HackathonFeed email'}</span>{' '}
-              on the payment page so we can activate your plan automatically.
-            </p>
-          </div>
-        )}
-
         {error && (
           <div className="mx-6 mt-4 px-4 py-3 bg-[#e63b2e] border-2 border-black font-mono text-xs text-white font-bold uppercase">
             ⚠ {error}
-          </div>
-        )}
-        {successPlan && (
-          <div className="mx-6 mt-4 px-4 py-3 bg-[#0055ff] border-2 border-black font-mono text-xs text-white font-bold uppercase flex items-center gap-2">
-            <Check className="w-4 h-4" strokeWidth={3} />
-            Plan upgraded to {successPlan.toUpperCase()}!
           </div>
         )}
 
@@ -250,7 +210,7 @@ export function SubscriptionModal({
               {plans.map((plan) => {
                 const styles = CARD_STYLES[plan.key];
                 const isCurrent = plan.key === currentPlan;
-                const isBusy = upgrading === plan.key || waitingPlan === plan.key;
+                const isBusy = upgrading === plan.key;
                 const isDowngrade = PLAN_ORDER[plan.key] < PLAN_ORDER[currentPlan];
                 const isFree = plan.price_inr === 0;
                 const hasPaymentPage = Boolean(plan.payment_page_url);
@@ -300,7 +260,7 @@ export function SubscriptionModal({
 
                     <button
                       type="button"
-                      disabled={isCurrent || !!upgrading || !!waitingPlan || isDowngrade || (!isFree && !hasPaymentPage)}
+                      disabled={isCurrent || !!upgrading || isDowngrade || (!isFree && !hasPaymentPage)}
                       onClick={() => !isFree && handleUpgrade(plan.key)}
                       className={`w-full py-3 px-4 border-3 border-black font-headline font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
                         isCurrent
@@ -321,7 +281,7 @@ export function SubscriptionModal({
                       {isBusy ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          {waitingPlan === plan.key ? 'CONFIRMING PAYMENT…' : 'OPENING PAYMENT…'}
+                          OPENING PAYMENT…
                         </>
                       ) : isCurrent ? (
                         <>
@@ -350,7 +310,7 @@ export function SubscriptionModal({
 
         <div className="border-t-4 border-black bg-[#1a1a1a] px-6 py-4">
           <p className="font-mono text-[9px] uppercase font-bold text-white/35 text-center">
-            Pay on Razorpay · Use your HackathonFeed email · Plan activates automatically after payment
+            Pay on Razorpay · Use your HackathonFeed email · You will return here after payment
           </p>
         </div>
       </div>

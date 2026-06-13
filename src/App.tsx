@@ -82,6 +82,8 @@ import { ProfilePhotoSettings } from './components/ProfilePhotoSettings';
 import { OnboardingTour, shouldShowTour, queueTourForNewUser } from './components/OnboardingTour';
 import { OnboardingProfileSetup, shouldShowProfileSetup, queueProfileSetup } from './components/OnboardingProfileSetup';
 import { SubscriptionModal } from './components/SubscriptionModal';
+import { SubscriptionUpgradeSuccess } from './components/SubscriptionUpgradeSuccess';
+import { consumePostLoginRedirect } from './lib/billingRedirect';
 import { AdminPanel } from './components/AdminPanel';
 import { ForgotPasswordModal } from './components/ForgotPasswordModal';
 import { getMySubscription } from './api/subscriptions';
@@ -638,6 +640,13 @@ export default function App() {
   };
 
   const completeAuthRedirect = () => {
+    const postLoginPath = consumePostLoginRedirect();
+    if (postLoginPath) {
+      navigateTo(postLoginPath);
+      setPendingTab(null);
+      return;
+    }
+
     if (pendingTab === 'tracker') {
       setTrackHackathonName(pendingRegisterHack?.title ?? trackHackathonName);
       navigateTo('/tracking');
@@ -1185,6 +1194,23 @@ export default function App() {
       }}
     />
   ) : null;
+
+  if (window.location.pathname === '/billing/success') {
+    return (
+      <>
+        <SubscriptionUpgradeSuccess
+          isAuthenticated={isAuthenticated}
+          authLoading={authLoading}
+          onSuccess={(status) => {
+            setSubscriptionStatus(status);
+            void refreshUser();
+          }}
+          onGoToDashboard={() => navigateTo('/dashboard')}
+          onSignIn={() => navigateTo('/login')}
+        />
+      </>
+    );
+  }
 
   if (hackathonDetailId) {
     return (
