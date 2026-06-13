@@ -30,8 +30,21 @@ export function parsePlanFromSearch(search: string): SubscriptionPlan | null {
   return null;
 }
 
+export function parsePaymentIdFromSearch(search: string): string | null {
+  const params = new URLSearchParams(search);
+  return (
+    params.get('razorpay_payment_id')
+    ?? params.get('payment_id')
+    ?? params.get('razorpay_payment_link_id')
+  );
+}
+
 export function resolveUpgradePlan(search: string): SubscriptionPlan | null {
   return parsePlanFromSearch(search) ?? readPendingUpgrade();
+}
+
+export function resolvePaymentId(search: string): string | null {
+  return parsePaymentIdFromSearch(search);
 }
 
 export function savePostLoginRedirect(path: string) {

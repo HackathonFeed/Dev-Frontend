@@ -5,6 +5,7 @@ import { waitForPlanUpgrade } from '../api/subscriptions';
 import {
   billingSuccessPath,
   clearPendingUpgrade,
+  resolvePaymentId,
   resolveUpgradePlan,
   savePostLoginRedirect,
 } from '../lib/billingRedirect';
@@ -59,6 +60,7 @@ export function SubscriptionUpgradeSuccess({
     if (authLoading) return;
 
     const expectedPlan = resolveUpgradePlan(window.location.search);
+    const paymentId = resolvePaymentId(window.location.search);
     if (!expectedPlan || expectedPlan === 'hacker') {
       setError('Could not detect which plan you purchased. Open Settings → Upgrade to confirm your plan.');
       setPhase('error');
@@ -80,6 +82,7 @@ export function SubscriptionUpgradeSuccess({
         const status = await waitForPlanUpgrade(expectedPlan, {
           maxAttempts: 40,
           intervalMs: 1500,
+          paymentId,
         });
         if (cancelled) return;
 

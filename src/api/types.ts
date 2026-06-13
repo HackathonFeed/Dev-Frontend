@@ -57,6 +57,7 @@ export interface PaymentPageResponse {
   price_inr: number;
   payment_page_url: string;
   checkout_note: string;
+  success_redirect_url?: string | null;
 }
 
 export interface CreateOrderResponse {

@@ -29,26 +29,33 @@ export async function getPaymentPage(plan: SubscriptionPlan): Promise<PaymentPag
 }
 
 /** Verify payment with Razorpay API and apply plan upgrade for the logged-in user. */
-export async function claimPlanUpgrade(plan: SubscriptionPlan): Promise<SubscriptionStatus> {
+export async function claimPlanUpgrade(
+  plan: SubscriptionPlan,
+  paymentId?: string | null,
+): Promise<SubscriptionStatus> {
   return apiRequest<SubscriptionStatus>('/subscriptions/claim-upgrade', {
     method: 'POST',
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify({
+      plan,
+      ...(paymentId ? { payment_id: paymentId } : {}),
+    }),
   });
 }
 
 /** Poll until plan upgrades after Payment Page checkout. */
 export async function waitForPlanUpgrade(
   expectedPlan: SubscriptionPlan,
-  options?: { maxAttempts?: number; intervalMs?: number },
+  options?: { maxAttempts?: number; intervalMs?: number; paymentId?: string | null },
 ): Promise<SubscriptionStatus> {
   const maxAttempts = options?.maxAttempts ?? 30;
   const intervalMs = options?.intervalMs ?? 2000;
+  const paymentId = options?.paymentId ?? null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      return await claimPlanUpgrade(expectedPlan);
+      return await claimPlanUpgrade(expectedPlan, paymentId);
     } catch (err) {
-      if (!(err instanceof ApiError) || (err.status !== 404 && err.status !== 503)) {
+      if (!(err instanceof ApiError) || (err.status !== 404 && err.status !== 503 && err.status !== 409)) {
         throw err;
       }
     }
