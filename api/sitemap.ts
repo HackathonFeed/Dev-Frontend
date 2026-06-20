@@ -3,9 +3,24 @@
 // Generates a sitemap that includes every hackathon from the backend so Google can
 // discover individual /h/<id> URLs.
 
-import { backendApiUrl } from './_backend';
-
 const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://www.hackathonfeed.com';
+const DIRECT_BACKEND = 'https://dev-backend-rho.vercel.app';
+
+function isLocalBackendUrl(url: string): boolean {
+  return /^(https?:\/\/)?(0\.0\.0\.0|127\.0\.0\.1|localhost)(:\d+)?/i.test(url);
+}
+
+function backendApiUrl(path: string, req?: { headers?: { host?: string } }): string {
+  const env = process.env.BACKEND_URL?.replace(/\/$/, '');
+  const origin =
+    env && !isLocalBackendUrl(env)
+      ? env
+      : req?.headers?.host && !req.headers.host.includes('localhost')
+        ? `https://${req.headers.host}`
+        : DIRECT_BACKEND;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${origin}${normalizedPath}`;
+}
 
 type HackathonApi = {
   id: string;
