@@ -14,6 +14,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { getHackathon, type HackathonApi } from '../api';
+import { useSeo } from '../hooks/useSeo';
 import {
   getHackathonStatusLabel,
   getStatusBadgeClass,
@@ -98,6 +99,18 @@ export const HackathonDetailPage: React.FC<HackathonDetailPageProps> = ({
   const thumbnail = normalizeThumbnail(data?.thumbnail);
   const registrationOpen = data ? isHackathonRegistrationOpen(data) : false;
   const eventEnded = mapped?.apiStatus === 'ended';
+
+  useSeo({
+    title: data
+      ? `${data.title}${data.prize_pool ? ` — ${data.prize_pool} Prize Pool` : ''} | HackathonFeed`
+      : 'Hackathon — HackathonFeed',
+    description: data
+      ? `${data.title} on ${data.source_platform ?? 'HackathonFeed'}. ${
+          data.organizer ? `Organized by ${data.organizer}. ` : ''
+        }${data.prize_pool ?? ''} ${data.deadline ? `Deadline: ${data.deadline}.` : ''}`.trim()
+      : 'Hackathon details, prize pool, deadline, and registration info on HackathonFeed.',
+    canonicalPath: `/h/${hackathonId}`,
+  });
 
   useEffect(() => {
     if (!data) return;

@@ -1106,6 +1106,13 @@ export default function App() {
   };
 
   const seoConfig = (() => {
+    if (hackathonDetailId) {
+      return {
+        title: 'Hackathon — HackathonFeed',
+        description: 'Hackathon details, prize pool, deadline, and registration info on HackathonFeed.',
+        canonicalPath: `/h/${hackathonDetailId}`,
+      };
+    }
     if (publicProfileUsername) {
       return {
         title: `@${publicProfileUsername} on HackathonFeed`,

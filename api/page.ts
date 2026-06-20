@@ -6,11 +6,10 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { backendApiUrl } from './_backend';
 
 const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://www.hackathonfeed.com';
 const DEFAULT_OG_IMAGE = `${SITE_ORIGIN}/og-image.png`;
-const BACKEND_URL =
-  process.env.BACKEND_URL ?? 'https://dev-backend-rho.vercel.app';
 
 // Read the built index.html once on cold start (bundled via vercel.json includeFiles).
 let templateCache: string | null = null;
@@ -140,15 +139,52 @@ function applySeoTags(html: string, seo: RouteSeo): string {
   return next;
 }
 
-async function fetchHackathon(id: string): Promise<HackathonApi | null> {
+async function fetchHackathon(
+  id: string,
+  req?: { headers?: { host?: string } },
+): Promise<HackathonApi | null> {
   try {
-    const resp = await fetch(`${BACKEND_URL}/api/v1/hackathons/${encodeURIComponent(id)}`);
+    const resp = await fetch(
+      backendApiUrl(`/api/v1/hackathons/${encodeURIComponent(id)}`, req),
+    );
     if (!resp.ok) return null;
     const body = (await resp.json()) as ApiEnvelope<HackathonApi> | HackathonApi;
     return 'data' in body ? body.data : (body as HackathonApi);
   } catch {
     return null;
   }
+}
+
+function buildHackathonSeo(hack: HackathonApi): RouteSeo {
+  return {
+    title: `${hack.title}${hack.prize_pool ? ` — ${hack.prize_pool} Prize Pool` : ''} | HackathonFeed`,
+    description: `${hack.title} on ${hack.source_platform ?? 'HackathonFeed'}. ${
+      hack.organizer ? `Organized by ${hack.organizer}. ` : ''
+    }${hack.prize_pool ?? ''} ${hack.deadline ? `Deadline: ${hack.deadline}.` : ''}`.trim(),
+    canonical: `${SITE_ORIGIN}/h/${hack.id}`,
+    ogImage: hack.thumbnail ?? DEFAULT_OG_IMAGE,
+  };
+}
+
+function injectHackathonPreview(html: string, hack: HackathonApi): string {
+  const title = escapeHtml(hack.title);
+  const organizer = hack.organizer ? escapeHtml(hack.organizer) : null;
+  const prizePool = hack.prize_pool ? escapeHtml(hack.prize_pool) : null;
+  const deadline = hack.deadline ? escapeHtml(hack.deadline) : null;
+  const platform = hack.source_platform ? escapeHtml(hack.source_platform) : 'HackathonFeed';
+  const mode = hack.mode ? escapeHtml(hack.mode) : null;
+  const preview = `<main id="ssr-hackathon-preview">
+  <h1>${title}</h1>
+  <p>${title} on ${platform}${organizer ? `, organized by ${organizer}` : ''}.</p>
+  <ul>
+    ${prizePool ? `<li>Prize pool: ${prizePool}</li>` : ''}
+    ${deadline ? `<li>Deadline: ${deadline}</li>` : ''}
+    ${mode ? `<li>Mode: ${mode}</li>` : ''}
+  </ul>
+  <p><a href="${escapeHtml(hack.url ?? `${SITE_ORIGIN}/h/${hack.id}`)}">View hackathon details</a></p>
+</main>`;
+
+  return html.replace('<div id="root"></div>', `<div id="root">${preview}</div>`);
 }
 
 function buildEventJsonLd(hack: HackathonApi): Record<string, unknown> {
@@ -195,17 +231,10 @@ export default async function handler(req: any, res: any) {
 
   const hackMatch = pathname.match(/^\/h\/([a-zA-Z0-9_-]+)\/?$/);
   if (hackMatch) {
-    const hack = await fetchHackathon(hackMatch[1]);
+    const hack = await fetchHackathon(hackMatch[1], req);
     if (hack) {
-      const seo: RouteSeo = {
-        title: `${hack.title}${hack.prize_pool ? ` — ${hack.prize_pool} Prize Pool` : ''} | HackathonFeed`,
-        description: `${hack.title} on ${hack.source_platform ?? 'HackathonFeed'}. ${
-          hack.organizer ? `Organized by ${hack.organizer}. ` : ''
-        }${hack.prize_pool ?? ''} ${hack.deadline ? `Deadline: ${hack.deadline}.` : ''}`.trim(),
-        canonical: `${SITE_ORIGIN}/h/${hack.id}`,
-        ogImage: hack.thumbnail ?? DEFAULT_OG_IMAGE,
-      };
-      html = applySeoTags(html, seo);
+      html = applySeoTags(html, buildHackathonSeo(hack));
+      html = injectHackathonPreview(html, hack);
       const jsonLd = `<script type="application/ld+json" id="hackathon-event-jsonld">${JSON.stringify(buildEventJsonLd(hack))}</script>`;
       html = html.replace('</head>', `${jsonLd}</head>`);
     } else {

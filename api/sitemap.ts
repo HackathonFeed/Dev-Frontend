@@ -3,9 +3,9 @@
 // Generates a sitemap that includes every hackathon from the backend so Google can
 // discover individual /h/<id> URLs.
 
+import { backendApiUrl } from './_backend';
+
 const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://www.hackathonfeed.com';
-const BACKEND_URL =
-  process.env.BACKEND_URL ?? 'https://dev-backend-rho.vercel.app';
 
 type HackathonApi = {
   id: string;
@@ -24,13 +24,18 @@ function escapeXml(value: string): string {
     .replace(/'/g, '&apos;');
 }
 
-async function fetchAllHackathons(): Promise<HackathonApi[]> {
+async function fetchAllHackathons(
+  req?: { headers?: { host?: string } },
+): Promise<HackathonApi[]> {
   const collected: HackathonApi[] = [];
   let page = 1;
   while (page < 50) {
     try {
       const resp = await fetch(
-        `${BACKEND_URL}/api/v1/hackathons?page=${page}&page_size=100&only_open=false`,
+        backendApiUrl(
+          `/api/v1/hackathons?page=${page}&page_size=100&only_open=false`,
+          req,
+        ),
       );
       if (!resp.ok) break;
       const body = (await resp.json()) as
@@ -48,9 +53,9 @@ async function fetchAllHackathons(): Promise<HackathonApi[]> {
 }
 
 // Vercel Node.js function signature
-export default async function handler(_req: any, res: any) {
+export default async function handler(req: any, res: any) {
   try {
-    const hackathons = await fetchAllHackathons();
+    const hackathons = await fetchAllHackathons(req);
     const urls = [
       { loc: `${SITE_ORIGIN}/`, changefreq: 'daily', priority: '1.0' },
       { loc: `${SITE_ORIGIN}/hackathons`, changefreq: 'daily', priority: '0.9' },
